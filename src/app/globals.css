@@ -1,26 +1,42 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Cosmic Dark Background */
+    --background: #050a0f;
+    --foreground: #e2f1e7;
+
+    /* Ayurvedic Neon Green for AI vibe */
+    --primary: #00ff88;
+    --primary-glow: rgba(0, 255, 136, 0.4);
+
+    /* Swarna (Gold) for premium accents */
+    --accent: #ffd700;
+    
+    /* Deep blue/green for glass panels */
+    --glass-bg: rgba(10, 25, 20, 0.4);
+    --glass-border: rgba(0, 255, 136, 0.15);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    /* Futuristic grid background */
+    background-image: 
+      linear-gradient(rgba(0, 255, 136, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 255, 136, 0.03) 1px, transparent 1px);
+    background-size: 30px 30px;
+    font-family: system-ui, -apple-system, sans-serif;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  .glass-panel {
+    /* v4 syntax: bg-[var(--x)] ki jagah ab bg-(--x) use hota hai */
+    @apply bg-(--glass-bg) backdrop-blur-md border border-(--glass-border) rounded-2xl shadow-[0_0_15px_var(--primary-glow)];
+  }
+  
+  .text-glow {
+    text-shadow: 0 0 10px var(--primary-glow);
+  }
 }
