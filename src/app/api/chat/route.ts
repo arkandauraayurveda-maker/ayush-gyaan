@@ -216,11 +216,9 @@ ${retrievedSlokas}
       } else {
         const chat = chatModel.startChat({
           history: sanitizedHistory,
-          const chat = chatModel.startChat({
-            history: sanitizedHistory,
-            systemInstruction: finalSystemInstruction // 🔥 बस इतना ही लिखना है
-          });
+          systemInstruction: finalSystemInstruction
         });
+        
         const res = await chat.sendMessage(message);
         return res.response.text();
       }
