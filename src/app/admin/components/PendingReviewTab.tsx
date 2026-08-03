@@ -129,20 +129,23 @@ export default function PendingReviewTab() {
         <div className="bg-gray-900/50 p-4 border-b border-gray-800 flex justify-between items-center">
           <h3 className="text-lg font-bold text-white flex items-center gap-2">
             <Database className="w-5 h-5 text-accent" /> {chapterName}
-            <span className="bg-gray-800 text-xs px-2 py-0.5 rounded-full text-gray-300 ml-2">{shlokasList.length} Items</span>
+            /* 🔥 FIX 1: Added Type Casting for length */
+            <span className="bg-gray-800 text-xs px-2 py-0.5 rounded-full text-gray-300 ml-2">{(shlokasList as any[]).length} Items</span>
           </h3>
           <div className="flex gap-2">
-            <button onClick={() => handleBulkApprove(shlokasList)} className="px-3 py-1.5 bg-green-900/30 text-green-400 hover:bg-green-900/50 rounded text-xs font-bold border border-green-500/30 flex items-center gap-1">
+            /* 🔥 FIX 2: Added Type Casting for handleBulkApprove */
+            <button onClick={() => handleBulkApprove(shlokasList as any[])} className="px-3 py-1.5 bg-green-900/30 text-green-400 hover:bg-green-900/50 rounded text-xs font-bold border border-green-500/30 flex items-center gap-1">
               <CheckCheck className="w-3 h-3" /> Approve All
             </button>
-            <button onClick={() => handleBulkDelete(shlokasList)} className="px-3 py-1.5 bg-red-900/30 text-red-400 hover:bg-red-900/50 rounded text-xs font-bold border border-red-500/30 flex items-center gap-1">
+            
+            <button onClick={() => handleBulkDelete(shlokasList as any[])} className="px-3 py-1.5 bg-red-900/30 text-red-400 hover:bg-red-900/50 rounded text-xs font-bold border border-red-500/30 flex items-center gap-1">
               <Trash className="w-3 h-3" /> Delete All
             </button>
           </div>
         </div>
 
         <div className="p-4 space-y-6">
-          {shlokasList.map((shloka, index) => {
+          {(shlokasList as any[]).map((shloka, index) => {
             const isDuplicate = textCounts.get(shloka.originalShloka) > 1 || numCounts.get(shloka.shlokaNumber) > 1;
 
             return (
@@ -153,6 +156,7 @@ export default function PendingReviewTab() {
                 key={shloka._id} 
                 className={`glass-panel p-8 border relative transition-colors ${isDuplicate ? "border-red-500/80 shadow-[0_0_15px_rgba(239,68,68,0.15)] bg-red-950/10" : "border-gray-800 hover:border-gray-700"}`}
               >
+              
                 
                 {!isDuplicate && <span className="absolute top-4 right-4 bg-yellow-500/20 text-yellow-500 text-xs px-3 py-1 rounded-full font-bold">PENDING</span>}
                 
