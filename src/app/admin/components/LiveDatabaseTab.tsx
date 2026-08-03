@@ -128,20 +128,23 @@ export default function LiveDatabaseTab() {
       return <div className="glass-panel p-10 text-center text-gray-500 border-dashed">No data available.</div>;
     }
 
-    return Object.entries(grouped).map(([chapterName, shlokasList]) => (
+  return Object.entries(grouped).map(([chapterName, shlokasList]) => (
       <div key={chapterName} className="border border-gray-800 bg-black/20 rounded-xl overflow-hidden mb-6 shadow-lg">
         <div className="bg-gray-900/50 p-4 border-b border-gray-800 flex justify-between items-center">
           <h3 className="text-lg font-bold text-white flex items-center gap-2">
             <Database className="w-5 h-5 text-blue-400" /> {chapterName}
-            <span className="bg-gray-800 text-xs px-2 py-0.5 rounded-full text-gray-300 ml-2">{shlokasList.length} Items</span>
+            {/* 1. Type casting added here for .length */}
+            <span className="bg-gray-800 text-xs px-2 py-0.5 rounded-full text-gray-300 ml-2">{(shlokasList as any[]).length} Items</span>
           </h3>
-          <button onClick={() => handleBulkDelete(shlokasList)} className="px-3 py-1.5 bg-red-900/30 text-red-400 hover:bg-red-900/50 rounded text-xs font-bold border border-red-500/30 flex items-center gap-1">
+          {/* 2. Type casting added here for the delete function parameter */}
+          <button onClick={() => handleBulkDelete(shlokasList as any[])} className="px-3 py-1.5 bg-red-900/30 text-red-400 hover:bg-red-900/50 rounded text-xs font-bold border border-red-500/30 flex items-center gap-1">
             <Trash className="w-3 h-3" /> Delete All
           </button>
         </div>
 
         <div className="p-4 space-y-6">
-          {shlokasList.map((shloka, index) => {
+          {/* 3. Type casting added here for the .map function */}
+          {(shlokasList as any[]).map((shloka, index) => {
             const isDuplicate = textCounts.get(shloka.originalShloka) > 1 || numCounts.get(shloka.shlokaNumber) > 1;
 
             return (
