@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { auth } from "@/lib/firebase";
-import { Loader2, UserCircle, Phone, GraduationCap, Building2, ArrowRight, School } from "lucide-react";
+import { Loader2, UserCircle, Phone, GraduationCap, Building2, ArrowRight, School, User } from "lucide-react";
 
-export default function OnboardingPage() {
+// 🛠️ FIX: पूरा लॉजिक एक अलग कंपोनेंट (OnboardingContent) में डाल दिया गया है
+function OnboardingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectUrl = searchParams.get("redirect");
@@ -19,6 +20,7 @@ export default function OnboardingPage() {
   const [loadingInstitutions, setLoadingInstitutions] = useState(true);
 
   // 📝 Dynamic Form States
+  const [name, setName] = useState(""); // 🔥 NEW: Student Name State
   const [mobile, setMobile] = useState("");
   const [course, setCourse] = useState("BAMS");
   const [batchYear, setBatchYear] = useState("");
@@ -58,24 +60,24 @@ export default function OnboardingPage() {
       }
 
       setUser(currentUser);
+      setName(currentUser.displayName || ""); // 🔥 NEW: Firebase से डिफ़ॉल्ट नाम सेट करना
       setLoading(false);
     });
 
     // 2. Fetch Institutions from Database
-    // 2. Fetch Institutions from Database
-const fetchInstitutions = async () => {
-  try {
-    const res = await fetch('/api/institutions'); 
-    const data = await res.json();
-    if (data.success) {
-      setInstitutionsList(data.data); // 🔥 FIX: Yahan data.data aayega
-    }
-  } catch (error) {
-    console.error("Failed to fetch institutions:", error);
-  } finally {
-    setLoadingInstitutions(false);
-  }
-};
+    const fetchInstitutions = async () => {
+      try {
+        const res = await fetch('/api/institutions'); 
+        const data = await res.json();
+        if (data.success) {
+          setInstitutionsList(data.data); 
+        }
+      } catch (error) {
+        console.error("Failed to fetch institutions:", error);
+      } finally {
+        setLoadingInstitutions(false);
+      }
+    };
     fetchInstitutions();
 
     return () => unsubscribe();
@@ -85,21 +87,24 @@ const fetchInstitutions = async () => {
   const handleUniChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const uni = e.target.value;
     setSelectedUni(uni);
-    setSelectedCollege(""); // Reset college when university changes
+    setSelectedCollege(""); 
     setOtherCollege("");
     if (uni !== "Other") {
       setOtherUni("");
     }
   };
 
-  // Get available colleges for the selected university
   const availableColleges = institutionsList.find(inst => inst.university === selectedUni)?.colleges || [];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    // Final values check for "Other"
+    if (!name.trim()) {
+      alert("Please enter your full name.");
+      return;
+    }
+
     const finalUniversity = selectedUni === "Other" ? otherUni : selectedUni;
     const finalCollege = selectedCollege === "Other" ? otherCollege : selectedCollege;
 
@@ -117,7 +122,7 @@ const fetchInstitutions = async () => {
         body: JSON.stringify({
           uid: user.uid,
           email: user.email,
-          name: user.displayName || "Scholar",
+          name: name, // 🔥 NEW: अपडेटेड नाम डेटाबेस में सेव होगा
           mobile,
           university: finalUniversity,
           collegeName: finalCollege,
@@ -168,7 +173,23 @@ const fetchInstitutions = async () => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Email */}
+          
+          {/* 🔥 NEW: Student Name */}
+          <div>
+            <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+              <User className="w-4 h-4"/> Full Name *
+            </label>
+            <input 
+              type="text" 
+              required 
+              value={name} 
+              onChange={e => setName(e.target.value)} 
+              placeholder="Enter your full name" 
+              className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 outline-none transition-colors" 
+            />
+          </div>
+
+          {/* Email (Disabled) */}
           <div>
             <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
               <UserCircle className="w-4 h-4"/> Email Address
@@ -204,7 +225,6 @@ const fetchInstitutions = async () => {
               <option value="Other">Other (Not in list)</option>
             </select>
 
-            {/* Custom University Input (Shows if "Other" is selected) */}
             {selectedUni === "Other" && (
               <input 
                 type="text" 
@@ -237,7 +257,6 @@ const fetchInstitutions = async () => {
               <option value="Other">Other (Not in list)</option>
             </select>
 
-            {/* Custom College Input (Shows if "Other" is selected) */}
             {selectedCollege === "Other" && (
               <input 
                 type="text" 
@@ -284,3 +303,17 @@ const fetchInstitutions = async () => {
     </div>
   );
 }
+
+// 🛠️ FIX: मुख्य पेज को Suspense के अंदर रैप किया गया है
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#020604] flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-10 h-10 text-emerald-500 animate-spin" />
+        <p className="text-emerald-400 text-sm font-bold animate-pulse">Loading setup...</p>
+      </div>
+    }>
+      <OnboardingContent />
+    </Suspense>
+  );
+}s
