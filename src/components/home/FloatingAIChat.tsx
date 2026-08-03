@@ -107,7 +107,8 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
   };
 
   const startNewChat = () => {
-    setMessages([{ id: Date.now().toString(), role: "model", content: `प्रणाम ${userName}! 🙏 मैं आयुष-ज्ञान का उन्नत AI आयुर्वेदाचार्य हूँ। आप संहिताओं के श्लोक, उनके गूढ़ अर्थ, या किसी भी नैदानिक (clinical) विषय पर मेरा मार्गदर्शन प्राप्त कर सकते हैं।`, timestamp: Date.now() }]);
+    // 🔥 FIX: Added "as Message[]" for strict typing
+    setMessages([{ id: Date.now().toString(), role: "model", content: `प्रणाम ${userName}! 🙏 मैं आयुष-ज्ञान का उन्नत AI आयुर्वेदाचार्य हूँ। आप संहिताओं के श्लोक, उनके गूढ़ अर्थ, या किसी भी नैदानिक (clinical) विषय पर मेरा मार्गदर्शन प्राप्त कर सकते हैं।`, timestamp: Date.now() }] as Message[]);
   };
 
   useEffect(() => { if (isOpen) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isLoading, isOpen]);
@@ -161,7 +162,8 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
         triggerUpgradeCards(newMessages, data.error);
       }
     } catch (error) {
-      setMessages([...newMessages, { id: Date.now().toString(), role: "model", content: "⚠️ नेटवर्क कनेक्शन बाधित है। कृपया अपने इंटरनेट की जाँच करें और पुनः प्रयास करें।", timestamp: Date.now() }]);
+      // 🔥 FIX: Added "as Message[]" for strict typing
+      setMessages([...newMessages, { id: Date.now().toString(), role: "model", content: "⚠️ नेटवर्क कनेक्शन बाधित है। कृपया अपने इंटरनेट की जाँच करें और पुनः प्रयास करें।", timestamp: Date.now() }] as Message[]);
     } finally { setIsLoading(false); }
   };
 
@@ -221,7 +223,8 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
 
           if (verifyData.success) {
             setUserPlan({ tier: planId, tokens: planId === 'pro' ? 9999 : 1000 }); 
-            const successMsg = [...messages, { id: Date.now().toString(), role: "model", content: `🎉 अभिनंदन! आपका अकाउंट सफलतापूर्वक ${planId.toUpperCase()} प्लान में अपग्रेड हो चुका है। अब आप असीमित AI मार्गदर्शन प्राप्त कर सकते हैं।`, timestamp: Date.now() }];
+            // 🔥 FIX: Added ": Message[]" to strictly type the array
+            const successMsg: Message[] = [...messages, { id: Date.now().toString(), role: "model", content: `🎉 अभिनंदन! आपका अकाउंट सफलतापूर्वक ${planId.toUpperCase()} प्लान में अपग्रेड हो चुका है। अब आप असीमित AI मार्गदर्शन प्राप्त कर सकते हैं।`, timestamp: Date.now() }];
             setMessages(successMsg);
             saveToLocalHistory(successMsg);
           } else {
