@@ -3,7 +3,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import connectToDatabase from "@/lib/mongodb";
 import User from "@/models/User";
 import SystemSettings from "@/models/SystemSettings";
-import Shloka from "@/models/Shloka"; 
+import Shloka from "@/models/Shloka";
 import { adminAuth } from "@/lib/firebaseAdmin";
 
 export async function POST(req: NextRequest) {
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     const decodedToken = await adminAuth.verifyIdToken(idToken);
 
     let body;
-    try { body = await req.json(); } 
+    try { body = await req.json(); }
     catch (e) { return NextResponse.json({ success: false, error: "अमान्य अनुरोध (Invalid Request)" }, { status: 400 }); }
 
     const { message, image, history, courseId } = body;
@@ -33,33 +33,33 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ success: false, error: "उपयोगकर्ता नहीं मिला (User not found)" }, { status: 404 });
 
     const settings = await SystemSettings.findOne({ settingId: "global_settings" });
-    
+
     const adminLimits = settings?.aiLimits || { basic: 10, plus: 100, pro: 9999 };
-    const adminModels = settings?.aiModels || { 
-      basic: "gemini-1.5-flash-8b", 
-      plus: "gemini-1.5-flash", 
-      pro: "gemini-1.5-pro" 
+    const adminModels = settings?.aiModels || {
+      basic: "gemini-1.5-flash-8b",
+      plus: "gemini-1.5-flash",
+      pro: "gemini-1.5-pro"
     };
 
     // 🕒 3. PLAN EXPIRY & DAILY TOKEN RESET (WITH NEW USER FIX)
     let currentTier = (user.aiPlan?.tier || "basic").toLowerCase();
-    if (currentTier === "free") currentTier = "basic"; 
+    if (currentTier === "free") currentTier = "basic";
 
     // Auto-Downgrade Expiry Check
     if ((currentTier === "plus" || currentTier === "pro") && user.aiPlan?.validityEnd) {
       if (new Date() > new Date(user.aiPlan.validityEnd)) {
-        currentTier = "basic"; 
+        currentTier = "basic";
         user.aiPlan.tier = "basic";
       }
     }
 
     const today = new Date().setHours(0, 0, 0, 0);
-    const lastActive = user.aiPlan?.lastActiveDate ? new Date(user.aiPlan.lastActiveDate).setHours(0, 0, 0, 0) : 0; 
+    const lastActive = user.aiPlan?.lastActiveDate ? new Date(user.aiPlan.lastActiveDate).setHours(0, 0, 0, 0) : 0;
     let availableTokens = user.aiPlan?.tokens ?? 0;
 
     if (today > lastActive || !user.aiPlan?.lastActiveDate) {
       availableTokens = adminLimits[currentTier] || 10;
-      if (!user.aiPlan) user.aiPlan = {}; 
+      if (!user.aiPlan) user.aiPlan = {};
       user.aiPlan.tokens = availableTokens;
       user.aiPlan.tier = currentTier;
       user.aiPlan.lastActiveDate = new Date();
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
     // ==========================================
     if (!image && message) {
       // यह Regex '1/15', '1.15', 'अध्याय 1 श्लोक 15' जैसे पैटर्न को पकड़ेगा
-      const shlokaPattern = /(?:अध्याय|chapter|ch)?\s*(\d+)\s*(?:श्लोक|shloka|[\/\.\-])\s*(\d+[a-zA-Z]*)/i; 
+      const shlokaPattern = /(?:अध्याय|chapter|ch)?\s*(\d+)\s*(?:श्लोक|shloka|[\/\.\-])\s*(\d+[a-zA-Z]*)/i;
       const match = message.match(shlokaPattern);
 
       if (match) {
@@ -102,15 +102,15 @@ export async function POST(req: NextRequest) {
         if (directShlokas && directShlokas.length > 0) {
           // श्लोक के टुकड़ों (F, E, a, b) को आपस में जोड़ें
           let fullOriginalShloka = directShlokas.map(s => s.originalShloka).join("\n");
-          let fullTranslation = directShlokas[0].translationHindi || ""; 
+          let fullTranslation = directShlokas[0].translationHindi || "";
           let samhitaInfo = `${directShlokas[0].samhitaName || 'संहिता'} (${directShlokas[0].sthana || 'स्थान'}), अध्याय: ${directShlokas[0].chapter}, श्लोक: ${shlokaNo}`;
 
           // बिना AI कॉल किए सीधा रिस्पॉन्स भेज दें! (🔥 100% API Cost Saved)
           const directReply = `📚 **संदर्भ:** ${samhitaInfo}\n\n> 📜 **मूल श्लोक:**\n> ${fullOriginalShloka}\n\n🌿 **भावार्थ:**\n${fullTranslation}`;
-          
-          return NextResponse.json({ 
-            success: true, 
-            reply: directReply, 
+
+          return NextResponse.json({
+            success: true,
+            reply: directReply,
             remainingTokens: availableTokens // AI यूज़ नहीं हुआ, इसलिए टोकन नहीं काटे
           });
         }
@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
           }]);
 
           if (searchResults && searchResults.length > 0) {
-            retrievedSlokas = searchResults.map(s => 
+            retrievedSlokas = searchResults.map(s =>
               `संदर्भ: ${s.samhitaName || 'अज्ञात'} (${s.sthana || ''}), अध्याय: ${s.chapter}, श्लोक: ${s.shlokaNumber}\nमूल: ${s.originalShloka || ''}\nअर्थ: ${s.translationHindi || ''}\nविमर्श: ${s.vimarsh || ''}\nमेटा-टैग्स: ${s.metaTags || 'N/A'}`
             ).join("\n\n---\n\n");
           } else {
@@ -181,7 +181,7 @@ ${retrievedSlokas}
     let sanitizedHistory: any[] = [];
     if (Array.isArray(history)) {
       const rawHistory = history
-        .filter((msg: any) => msg && msg.role && !msg.content?.includes("⚠️")) 
+        .filter((msg: any) => msg && msg.role && !msg.content?.includes("⚠️"))
         .map((msg: any) => ({
           role: (msg.role === "assistant" || msg.role === "model") ? "model" : "user",
           parts: [{ text: msg.content || (msg.parts?.[0]?.text) || "" }]
@@ -216,7 +216,10 @@ ${retrievedSlokas}
       } else {
         const chat = chatModel.startChat({
           history: sanitizedHistory,
-          systemInstruction: { parts: [{ text: finalSystemInstruction }] }
+          const chat = chatModel.startChat({
+            history: sanitizedHistory,
+            systemInstruction: finalSystemInstruction // 🔥 बस इतना ही लिखना है
+          });
         });
         const res = await chat.sendMessage(message);
         return res.response.text();
@@ -237,14 +240,14 @@ ${retrievedSlokas}
 
     // 📉 11. DEDUCT TOKEN & RETURN SUCCESS
     await User.findOneAndUpdate(
-      { uid: decodedToken.uid }, 
+      { uid: decodedToken.uid },
       { $inc: { "aiPlan.tokens": -1 } }
     );
 
-    return NextResponse.json({ 
-      success: true, 
-      reply: finalAiReply, 
-      remainingTokens: availableTokens - 1 
+    return NextResponse.json({
+      success: true,
+      reply: finalAiReply,
+      remainingTokens: availableTokens - 1
     });
 
   } catch (error: any) {
