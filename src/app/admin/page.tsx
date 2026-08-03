@@ -8,24 +8,28 @@ import { Loader2 } from "lucide-react";
 
 // 🧩 Components Import
 import Sidebar from "./components/Sidebar";
-import AutoPilotTab from "./components/AutoPilotTab";
-import PendingReviewTab from "./components/PendingReviewTab";
-import LiveDatabaseTab from "./components/LiveDatabaseTab";
+import SamhitaManagerTab from "./components/SamhitaManagerTab"; 
 import CourseManagerTab from "./components/CourseManagerTab";
 import LeadsManagerTab from "./components/LeadsManagerTab";
 import StudentManagerTab from "./components/StudentManagerTab";
 import CouponManagerTab from "./components/CouponManagerTab";
 import InstitutionManagerTab from "./components/InstitutionManagerTab";
+// 🔥 NEW AI COMPONENTS IMPORTED
+import ChatAnalyticsTab from "./components/ChatAnalyticsTab";
+import GlobalSettingsTab from "./components/GlobalSettingsTab";
+import SubscriptionManagerTab from "./components/SubscriptionManagerTab"; // ✅ NEW TAB ADDED
 
 export default function AdminDashboard() {
   const router = useRouter();
   
-  // States
   const [isAdminAuthorized, setIsAdminAuthorized] = useState(false);
-  const [activeTab, setActiveTab] = useState<"EXTRACT" | "REVIEW" | "DATABASE" | "STUDENTS" | "COURSES" | "LEADS" | "COUPONS" | "INSTITUTIONS">("EXTRACT");
-  // 🔒 Security Check
+  
+  // 🔥 Added "SUBSCRIPTIONS" to activeTab types
+  const [activeTab, setActiveTab] = useState<"SAMHITA" | "STUDENTS" | "COURSES" | "LEADS" | "COUPONS" | "INSTITUTIONS" | "AI_CHAT_LOGS" | "GLOBAL_SETTINGS" | "SUBSCRIPTIONS">("SAMHITA");
+
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
+      // 🔒 CURRENT SECURITY: Only your specific email can access this page
       if (user && user.email === "jkdewasi961096@gmail.com") {
         setIsAdminAuthorized(true);
       } else {
@@ -38,33 +42,31 @@ export default function AdminDashboard() {
   if (!isAdminAuthorized) {
     return (
       <div className="min-h-screen bg-[#030705] flex items-center justify-center">
-        <Loader2 className="w-10 h-10 text-primary animate-spin" />
+        <Loader2 className="w-10 h-10 text-emerald-500 animate-spin" />
       </div>
     );
   }
 
-  // 🎨 Main Shell UI
   return (
     <div className="min-h-screen p-6 sm:p-10 relative overflow-hidden flex flex-col md:flex-row gap-6">
-      {/* Background Glows */}
-      <div className="absolute top-0 right-0 w-96 h-96 bg-accent/5 blur-[150px] -z-10" />
-      <div className="absolute bottom-0 left-0 w-96 h-96 bg-primary/10 blur-[150px] -z-10" />
+      <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-900/10 blur-[150px] -z-10" />
+      <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-900/10 blur-[150px] -z-10" />
 
-      {/* 🧩 1. The Extracted Sidebar */}
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      {/* 🧩 2. Dynamic Content Area (The Switcher) */}
       <main className="flex-1 h-[calc(100vh-80px)] overflow-y-auto pr-2 no-scrollbar relative">
         <AnimatePresence mode="wait">
-          {activeTab === "EXTRACT" && <AutoPilotTab key="extract" />}
-          {activeTab === "REVIEW" && <PendingReviewTab key="review" />}
-          {activeTab === "DATABASE" && <LiveDatabaseTab key="database" />}
+          {activeTab === "SAMHITA" && <SamhitaManagerTab key="samhita" />}
           {activeTab === "COURSES" && <CourseManagerTab key="courses" />}
           {activeTab === "LEADS" && <LeadsManagerTab key="leads" />}
           {activeTab === "STUDENTS" && <StudentManagerTab key="students" />}
           {activeTab === "COUPONS" && <CouponManagerTab key="coupons" />}
           {activeTab === "INSTITUTIONS" && <InstitutionManagerTab key="institutions" />}
-
+          
+          {/* 🔥 NEW AI TABS RENDER LOGIC */}
+          {activeTab === "AI_CHAT_LOGS" && <ChatAnalyticsTab key="ai_logs" />}
+          {activeTab === "GLOBAL_SETTINGS" && <GlobalSettingsTab key="global_settings" />}
+          {activeTab === "SUBSCRIPTIONS" && <SubscriptionManagerTab key="subscriptions" />}
         </AnimatePresence>
       </main>
     </div>

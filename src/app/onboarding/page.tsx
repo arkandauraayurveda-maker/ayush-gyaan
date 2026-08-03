@@ -1,270 +1,286 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { auth } from "@/lib/firebase";
-import { Sparkles, ArrowRight, Loader2, UserCircle, MapPin, GraduationCap, Building2, Phone } from "lucide-react";
-
-// 🛠️ FALLBACK DATA (jab tak Admin API ready nahi hoti)
-const FALLBACK_INSTITUTIONS = [
-  {
-    university: "Dr. Sarvepalli Radhakrishnan Rajasthan Ayurved University (DSRRAU)",
-    colleges: [
-      "University College of Ayurveda, Jodhpur",
-      "MMM Govt Ayurved College, Udaipur",
-      "Govt Ayurved College, Jaipur",
-      "Govt Ayurved College, Bikaner",
-      "Govt Ayurved College, Kekri",
-      "Govt Ayurved College, Bharatpur",
-      "Govt Ayurved College, Kota",
-      "Govt Ayurved College, Sikar"
-    ]
-  }
-];
+import { Loader2, UserCircle, Phone, GraduationCap, Building2, ArrowRight, School } from "lucide-react";
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const [userEmail, setUserEmail] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  
-  // 🏫 Dynamic Lists States
-  const [institutions, setInstitutions] = useState<any[]>([]);
-  const [availableColleges, setAvailableColleges] = useState<string[]>([]);
-  
-  // 🎛️ Manual Entry Toggle States
-  const [isManualUni, setIsManualUni] = useState(false);
-  const [isManualCollege, setIsManualCollege] = useState(false);
+  const searchParams = useSearchParams();
+  const redirectUrl = searchParams.get("redirect");
 
-  const [formData, setFormData] = useState({
-    name: "",
-    mobile: "",
-    collegeName: "",
-    university: "",
-    course: "BAMS",
-    batchYear: "",
-    address: ""
-  });
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 1. Auth Check
+  // 🏛️ Institutions Data State
+  const [institutionsList, setInstitutionsList] = useState<any[]>([]);
+  const [loadingInstitutions, setLoadingInstitutions] = useState(true);
+
+  // 📝 Dynamic Form States
+  const [mobile, setMobile] = useState("");
+  const [course, setCourse] = useState("BAMS");
+  const [batchYear, setBatchYear] = useState("");
+  
+  // University & College States
+  const [selectedUni, setSelectedUni] = useState("");
+  const [otherUni, setOtherUni] = useState("");
+  const [selectedCollege, setSelectedCollege] = useState("");
+  const [otherCollege, setOtherCollege] = useState("");
+
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) {
-        setUserEmail(user.email || "");
-      } else {
-        router.push("/login"); // Security check
+    // 1. Firebase Auth & Sync Logic
+    const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
+      if (!currentUser) {
+        router.replace(redirectUrl ? `/login?redirect=${encodeURIComponent(redirectUrl)}` : "/login");
+        return;
       }
-    });
-    return () => unsubscribe();
-  }, [router]);
 
-  // 2. Fetch Institutions List (Admin Controlled)
-  useEffect(() => {
-    const fetchInstitutions = async () => {
       try {
-        const res = await fetch('/api/institutions');
-        const data = await res.json();
-        if (data.success && data.data.length > 0) {
-          setInstitutions(data.data);
-        } else {
-          setInstitutions(FALLBACK_INSTITUTIONS);
+        const userRes = await fetch('/api/auth/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uid: currentUser.uid, email: currentUser.email, name: currentUser.displayName || "" })
+        });
+        const userData = await userRes.json();
+        
+        if (userData.success && userData.user.isOnboarded) {
+          if (redirectUrl && redirectUrl !== "undefined" && redirectUrl !== "null") {
+            router.replace(redirectUrl);
+          } else {
+            router.replace("/dashboard");
+          }
+          return;
         }
       } catch (error) {
-        // Fallback agar API abhi nahi bani hai
-        setInstitutions(FALLBACK_INSTITUTIONS);
+        console.error("Sync error:", error);
       }
-    };
+
+      setUser(currentUser);
+      setLoading(false);
+    });
+
+    // 2. Fetch Institutions from Database
+    // 2. Fetch Institutions from Database
+const fetchInstitutions = async () => {
+  try {
+    const res = await fetch('/api/institutions'); 
+    const data = await res.json();
+    if (data.success) {
+      setInstitutionsList(data.data); // 🔥 FIX: Yahan data.data aayega
+    }
+  } catch (error) {
+    console.error("Failed to fetch institutions:", error);
+  } finally {
+    setLoadingInstitutions(false);
+  }
+};
     fetchInstitutions();
-  }, []);
 
-  // 3. Normal Input Handler
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
+    return () => unsubscribe();
+  }, [router, redirectUrl]);
 
-  // 4. Smart University Selection Logic
-  const handleUniversityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedUni = e.target.value;
-    
-    if (selectedUni === "OTHER") {
-      setIsManualUni(true);
-      setIsManualCollege(true); // Custom Uni = Custom College naturally
-      setAvailableColleges([]);
-      setFormData({ ...formData, university: "", collegeName: "" });
-    } else {
-      setIsManualUni(false);
-      setIsManualCollege(false);
-      
-      // Find colleges for this university
-      const found = institutions.find(inst => inst.university === selectedUni);
-      if (found) {
-        setAvailableColleges(found.colleges);
-      } else {
-        setAvailableColleges([]);
-      }
-      
-      setFormData({ ...formData, university: selectedUni, collegeName: "" });
+  // Handle University Change
+  const handleUniChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const uni = e.target.value;
+    setSelectedUni(uni);
+    setSelectedCollege(""); // Reset college when university changes
+    setOtherCollege("");
+    if (uni !== "Other") {
+      setOtherUni("");
     }
   };
 
-  // 5. Smart College Selection Logic
-  const handleCollegeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedCol = e.target.value;
-    if (selectedCol === "OTHER") {
-      setIsManualCollege(true);
-      setFormData({ ...formData, collegeName: "" });
-    } else {
-      setIsManualCollege(false);
-      setFormData({ ...formData, collegeName: selectedCol });
-    }
-  };
+  // Get available colleges for the selected university
+  const availableColleges = institutionsList.find(inst => inst.university === selectedUni)?.colleges || [];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.university || !formData.collegeName) {
-      return alert("Please select or enter your University and College.");
-    }
-    
-    setIsLoading(true);
-    try {
-      const user = auth.currentUser;
-      if (!user) throw new Error("No user found");
+    if (!user) return;
 
-      // API Call to save user details (Next Step me banayenge)
-      /*
-      await fetch('/api/user/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid: user.uid, ...formData, isOnboarded: true })
+    // Final values check for "Other"
+    const finalUniversity = selectedUni === "Other" ? otherUni : selectedUni;
+    const finalCollege = selectedCollege === "Other" ? otherCollege : selectedCollege;
+
+    if (!finalUniversity || !finalCollege) {
+      alert("Please select or enter both University and College.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const res = await fetch("/api/user/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uid: user.uid,
+          email: user.email,
+          name: user.displayName || "Scholar",
+          mobile,
+          university: finalUniversity,
+          collegeName: finalCollege,
+          course,
+          batchYear,
+          isOnboarded: true,
+        }),
       });
-      */
-      
-      console.log("Data Submitted:", formData);
-      await new Promise(res => setTimeout(res, 1500)); // Simulating delay
-      
-      router.push("/dashboard");
+
+      const data = await res.json();
+
+      if (data.success) {
+        if (redirectUrl && redirectUrl !== "undefined" && redirectUrl !== "null") {
+          router.replace(redirectUrl);
+        } else {
+          router.replace("/dashboard");
+        }
+      } else {
+        alert(data.error || "Failed to save profile.");
+        setIsSubmitting(false);
+      }
     } catch (error) {
-      console.error("Failed to save data:", error);
-      alert("Something went wrong. Please try again.");
-    } finally {
-      setIsLoading(false);
+      console.error("Onboarding error:", error);
+      alert("Something went wrong!");
+      setIsSubmitting(false);
     }
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#020604] flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-10 h-10 text-emerald-500 animate-spin" />
+        <p className="text-emerald-400 text-sm font-bold animate-pulse">Setting up your workspace...</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-[#030705] text-white font-sans selection:bg-emerald-500/30 px-4 py-8 md:py-12 overflow-y-auto">
-      
-      {/* Background Orbs */}
-      <div className="fixed top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-emerald-600/10 rounded-full blur-[120px] mix-blend-screen pointer-events-none" />
-      
-      <div className="max-w-xl mx-auto relative z-10">
-        
-        <div className="mb-8 text-center mt-4">
-          <div className="inline-flex p-3 rounded-2xl bg-gradient-to-br from-emerald-400/20 to-emerald-600/20 border border-emerald-500/30 mb-4">
-            <Sparkles className="w-6 h-6 text-emerald-400" />
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold mb-2">Complete Your Profile</h1>
-          <p className="text-sm text-gray-400">Let's personalize your AyushGyaan experience.</p>
+    <div className="min-h-screen bg-[#020604] text-white flex items-center justify-center p-4 selection:bg-emerald-500/30">
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden flex items-center justify-center">
+        <div className="w-[50vw] h-[50vw] bg-emerald-700/10 rounded-full blur-[120px] mix-blend-screen" />
+      </div>
+
+      <main className="relative z-10 w-full max-w-xl bg-white/5 border border-white/10 rounded-3xl p-6 md:p-10 backdrop-blur-xl shadow-2xl mt-10 mb-10">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-black mb-2">Complete Your Profile</h1>
+          <p className="text-gray-400 text-sm">Tell us a bit about yourself to unlock the AyushGyaan clinical ecosystem.</p>
         </div>
 
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-[#050B08]/80 backdrop-blur-xl border border-white/10 rounded-3xl p-5 sm:p-8 shadow-2xl"
-        >
-          <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Email */}
+          <div>
+            <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+              <UserCircle className="w-4 h-4"/> Email Address
+            </label>
+            <input type="text" value={user?.email || ""} disabled className="w-full bg-black/40 border border-white/5 rounded-xl px-4 py-3 text-sm text-gray-500 cursor-not-allowed" />
+          </div>
+
+          {/* Mobile Number */}
+          <div>
+            <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+              <Phone className="w-4 h-4"/> Mobile Number *
+            </label>
+            <input type="tel" required value={mobile} onChange={e => setMobile(e.target.value)} placeholder="e.g. 9876543210" className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 outline-none transition-colors" />
+          </div>
+
+          {/* 🏛️ University Selection */}
+          <div className="space-y-3">
+            <label className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+              <School className="w-4 h-4"/> Select University *
+            </label>
             
-            {/* Auto-filled Email */}
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5 pl-1">Email Address (Auto)</label>
-              <input type="email" value={userEmail} disabled className="w-full bg-white/5 border border-white/5 rounded-xl px-4 py-3.5 text-base text-gray-500 cursor-not-allowed" />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div>
-                <label className="flex text-xs font-medium text-gray-400 mb-1.5 pl-1 items-center gap-1"><UserCircle className="w-3 h-3"/> Full Name</label>
-                <input type="text" name="name" required value={formData.name} onChange={handleChange} className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3.5 text-base text-white focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all placeholder:text-gray-600" placeholder="Dr. Ayush Sharma" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1.5 pl-1 flex items-center gap-1"><Phone className="w-3 h-3"/> Mobile Number</label>
-                <input type="tel" name="mobile" required value={formData.mobile} onChange={handleChange} className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3.5 text-base text-white focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all placeholder:text-gray-600" placeholder="+91 99999 00000" />
-              </div>
-            </div>
-
-            {/* 🔥 DYNAMIC UNIVERSITY SELECTION 🔥 */}
-            <div className="space-y-3 p-4 rounded-2xl bg-white/5 border border-white/10">
-              <div>
-                <label className="block text-xs font-medium text-emerald-400 mb-1.5 pl-1 flex items-center gap-1"><GraduationCap className="w-3 h-3"/> Select University</label>
-                {!isManualUni ? (
-                  <select onChange={handleUniversityChange} required className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-3.5 text-sm text-white focus:outline-none focus:border-emerald-500/50 transition-all">
-                    <option value="">-- Choose your University --</option>
-                    {institutions.map((inst, idx) => (
-                      <option key={idx} value={inst.university}>{inst.university}</option>
-                    ))}
-                    <option value="OTHER" className="text-emerald-400 font-bold">Other (Type Manually)</option>
-                  </select>
-                ) : (
-                  <div className="flex gap-2">
-                    <input type="text" name="university" required value={formData.university} onChange={handleChange} autoFocus className="flex-1 bg-black/50 border border-emerald-500/50 rounded-xl px-4 py-3 text-sm text-white focus:outline-none" placeholder="Enter University Name" />
-                    <button type="button" onClick={() => setIsManualUni(false)} className="px-3 bg-white/10 rounded-xl text-xs hover:bg-white/20 transition-colors">Cancel</button>
-                  </div>
-                )}
-              </div>
-
-              {/* 🔥 DYNAMIC COLLEGE SELECTION 🔥 */}
-              <div>
-                <label className="block text-xs font-medium text-emerald-400 mb-1.5 pl-1 flex items-center gap-1"><Building2 className="w-3 h-3"/> Select College</label>
-                {!isManualCollege ? (
-                  <select onChange={handleCollegeChange} required disabled={!formData.university} className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-3.5 text-sm text-white focus:outline-none focus:border-emerald-500/50 transition-all disabled:opacity-50">
-                    <option value="">-- Choose your College --</option>
-                    {availableColleges.map((col, idx) => (
-                      <option key={idx} value={col}>{col}</option>
-                    ))}
-                    <option value="OTHER" className="text-emerald-400 font-bold">Other (Type Manually)</option>
-                  </select>
-                ) : (
-                  <div className="flex gap-2">
-                    <input type="text" name="collegeName" required value={formData.collegeName} onChange={handleChange} autoFocus className="flex-1 bg-black/50 border border-emerald-500/50 rounded-xl px-4 py-3 text-sm text-white focus:outline-none" placeholder="Enter College Name" />
-                    <button type="button" onClick={() => { setIsManualCollege(false); setFormData({...formData, collegeName: ""}); }} className="px-3 bg-white/10 rounded-xl text-xs hover:bg-white/20 transition-colors">Cancel</button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-5">
-              <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1.5 pl-1">Course</label>
-                <select name="course" value={formData.course} onChange={handleChange} className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3.5 text-sm text-white focus:outline-none focus:border-emerald-500/50 transition-all">
-                  <option value="BAMS">BAMS</option>
-                  <option value="MD/MS (Ayurveda)">MD/MS (Ayurveda)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1.5 pl-1">Batch Year</label>
-                <input type="number" name="batchYear" required value={formData.batchYear} onChange={handleChange} className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3.5 text-sm text-white focus:outline-none focus:border-emerald-500/50 placeholder:text-gray-600" placeholder="e.g. 2023" />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5 pl-1 flex items-center gap-1"><MapPin className="w-3 h-3"/> Full Address (City, State)</label>
-              <input type="text" name="address" required value={formData.address} onChange={handleChange} className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3.5 text-sm text-white focus:outline-none focus:border-emerald-500/50 placeholder:text-gray-600" placeholder="Jaipur, Rajasthan" />
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full h-14 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white font-bold rounded-xl mt-6 transition-all active:scale-[0.98] flex justify-center items-center gap-2 disabled:opacity-70 disabled:pointer-events-none shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.4)]"
+            <select 
+              required 
+              value={selectedUni} 
+              onChange={handleUniChange} 
+              className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 outline-none appearance-none"
             >
-              {isLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : (
-                <>Save & Go to Dashboard <ArrowRight className="w-5 h-5" /></>
-              )}
-            </button>
+              <option value="" disabled>-- Choose your University --</option>
+              {loadingInstitutions ? <option disabled>Loading universities...</option> : null}
+              {institutionsList.map((inst) => (
+                <option key={inst._id} value={inst.university}>{inst.university}</option>
+              ))}
+              <option value="Other">Other (Not in list)</option>
+            </select>
 
-          </form>
-        </motion.div>
-        
-        <div className="h-10"></div>
-      </div>
+            {/* Custom University Input (Shows if "Other" is selected) */}
+            {selectedUni === "Other" && (
+              <input 
+                type="text" 
+                required 
+                value={otherUni} 
+                onChange={e => setOtherUni(e.target.value)} 
+                placeholder="Enter your University Name" 
+                className="w-full bg-emerald-900/20 border border-emerald-500/50 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-400 outline-none transition-colors" 
+              />
+            )}
+          </div>
+
+          {/* 🏫 College Selection */}
+          <div className="space-y-3">
+            <label className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+              <Building2 className="w-4 h-4"/> Select College *
+            </label>
+            
+            <select 
+              required 
+              value={selectedCollege} 
+              onChange={e => setSelectedCollege(e.target.value)} 
+              disabled={!selectedUni}
+              className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 outline-none appearance-none disabled:opacity-50"
+            >
+              <option value="" disabled>-- Choose your College --</option>
+              {availableColleges.map((collegeName: string, i: number) => (
+                <option key={i} value={collegeName}>{collegeName}</option>
+              ))}
+              <option value="Other">Other (Not in list)</option>
+            </select>
+
+            {/* Custom College Input (Shows if "Other" is selected) */}
+            {selectedCollege === "Other" && (
+              <input 
+                type="text" 
+                required 
+                value={otherCollege} 
+                onChange={e => setOtherCollege(e.target.value)} 
+                placeholder="Enter your College Name" 
+                className="w-full bg-emerald-900/20 border border-emerald-500/50 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-400 outline-none transition-colors" 
+              />
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            {/* Course */}
+            <div>
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                <GraduationCap className="w-4 h-4"/> Course
+              </label>
+              <select value={course} onChange={e => setCourse(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 outline-none appearance-none">
+                <option value="BAMS">BAMS</option>
+                <option value="BHMS">BHMS</option>
+                <option value="BUMS">BUMS</option>
+                <option value="Practitioner">Practitioner</option>
+              </select>
+            </div>
+
+            {/* Batch Year */}
+            <div>
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">Batch Year</label>
+              <input type="text" required value={batchYear} onChange={e => setBatchYear(e.target.value)} placeholder="e.g. 2021" className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 outline-none" />
+            </div>
+          </div>
+
+          {/* Submit Button */}
+          <button 
+            type="submit" 
+            disabled={isSubmitting}
+            className="w-full mt-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:scale-[1.02] transition-all disabled:opacity-50 disabled:hover:scale-100"
+          >
+            {isSubmitting ? <><Loader2 className="w-5 h-5 animate-spin"/> Updating Profile...</> : <>Get Started <ArrowRight className="w-5 h-5"/></>}
+          </button>
+        </form>
+      </main>
     </div>
   );
 }

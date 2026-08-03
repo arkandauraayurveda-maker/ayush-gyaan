@@ -5,7 +5,7 @@ export interface IShloka extends Document {
   sthana: string;
   chapter: number;
   shlokaNumber: string; // UI ke liye naam, e.g. "4-5"
-  containedShlokas: string[]; // NAYA FIELD RAG ke liye: ["4", "5"]
+  containedShlokas: string[]; // RAG ke liye: ["4", "5"]
   
   originalShloka: string;
   easyToReadShloka: string;
@@ -19,6 +19,12 @@ export interface IShloka extends Document {
   anvaya: string;
   translationHindi: string;
   vimarsh: string;
+
+  // 🔥 NEW FIELDS: Scholar Mode & Deep Tika RAG ke liye
+  tikaSanskrit: string;
+  tikaHindi: string;
+  tantraYukti: string;
+  grammarNotes: string[];
 
   metadata: {
     dosha: string[];
@@ -35,6 +41,9 @@ export interface IShloka extends Document {
   };
   
   status: "PENDING" | "APPROVED" | "REJECTED";
+  
+  // 🚀 AI RAG VECTOR EMBEDDINGS KE LIYE NAYA FIELD
+  embedding?: number[]; 
 }
 
 const ShlokaSchema = new Schema<IShloka>(
@@ -43,7 +52,7 @@ const ShlokaSchema = new Schema<IShloka>(
     sthana: { type: String, required: true },
     chapter: { type: Number, required: true },
     shlokaNumber: { type: String, required: true },
-    containedShlokas: [{ type: String }], // <-- Naya Field Added
+    containedShlokas: [{ type: String }],
     
     originalShloka: { type: String, required: true },
     easyToReadShloka: { type: String },
@@ -60,6 +69,12 @@ const ShlokaSchema = new Schema<IShloka>(
     translationHindi: { type: String },
     vimarsh: { type: String },
 
+    // 🔥 NEW FIELDS ADDED HERE
+    tikaSanskrit: { type: String },
+    tikaHindi: { type: String },
+    tantraYukti: { type: String },
+    grammarNotes: [{ type: String }],
+
     metadata: {
       dosha: [{ type: String }],
       dhatu: [{ type: String }],
@@ -74,7 +89,10 @@ const ShlokaSchema = new Schema<IShloka>(
       keywords: [{ type: String }]
     },
     
-    status: { type: String, default: "PENDING" }
+    status: { type: String, default: "PENDING" },
+
+    // 🚀 VECTOR SEARCH NUMBERS (1536 or 768 dimensions array)
+    embedding: { type: [Number], default: [] },
   },
   { timestamps: true }
 );

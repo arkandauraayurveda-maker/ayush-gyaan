@@ -2,12 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import { ShieldCheck, CheckCircle2, Ticket, CreditCard, Loader2, Lock, ArrowLeft, Sparkles, AlertCircle, UserCircle, Phone, Mail } from "lucide-react";
+import { ShieldCheck, CheckCircle2, Ticket, CreditCard, Loader2, Lock, ArrowLeft, Sparkles, AlertCircle, UserCircle, Phone, Mail, Bot } from "lucide-react";
 import Link from "next/link";
 import { auth } from "@/lib/firebase";
 
-// 🌐 Razorpay Script Loader
 const loadRazorpayScript = () => {
   return new Promise((resolve) => {
     const script = document.createElement("script");
@@ -19,33 +17,41 @@ const loadRazorpayScript = () => {
 };
 
 export default function CheckoutPage() {
-  const { courseId } = useParams();
+  const params = useParams();
+  const courseId = params?.courseId as string;
   const router = useRouter();
 
   const [course, setCourse] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   
-  // 🔥 NEW: Authenticated User State
   const [currentUser, setCurrentUser] = useState<any>(null);
 
-  // Coupon States
+  // 🎟️ Coupon States
   const [couponInput, setCouponInput] = useState("");
   const [appliedDiscount, setAppliedDiscount] = useState(0);
   const [couponError, setCouponError] = useState("");
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
 
-  // 🛡️ Initial Fetch & Security Check
+  // 🤖 🔥 NEW: AI Tier Selection State
+  // "none" | "basic" | "plus" | "pro"
+  const [selectedAiPlan, setSelectedAiPlan] = useState<string>("none");
+
   useEffect(() => {
+    if (!courseId || courseId === "undefined" || courseId === "null") {
+      router.replace("/dashboard"); 
+      return;
+    }
+
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      const currentPath = `/checkout/${courseId}`;
+
       if (!user) {
-        // Not logged in -> Kick to login page
-        router.push("/login");
+        router.push(`/login?redirect=${encodeURIComponent(currentPath)}`);
         return;
       }
 
       try {
-        // 1. Fetch Auth Details from DB (To get Mobile & Onboarding status)
         const userRes = await fetch('/api/auth/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -56,36 +62,35 @@ export default function CheckoutPage() {
         if (userData.success) {
           setCurrentUser(userData.user);
           
-          // Force onboarding if incomplete
           if (!userData.user.isOnboarded) {
-             alert("Please complete your profile first.");
-             router.push("/onboarding");
+             alert("Please complete your profile to continue with the checkout.");
+             router.push(`/onboarding?redirect=${encodeURIComponent(currentPath)}`);
              return;
           }
         }
 
-        // 2. Fetch Course Details
-        const courseRes = await fetch("/api/courses"); // Public courses API
+        const courseRes = await fetch("/api/courses/public"); 
         const courseData = await courseRes.json();
+        
         if (courseData.success) {
-          const selectedCourse = courseData.courses.find((c: any) => c.courseId === courseId);
+          const selectedCourse = courseData.courses.find((c: any) => c.courseId === courseId || c.id === courseId);
           if (selectedCourse) {
             setCourse(selectedCourse);
           } else {
             alert("Course not found!");
-            router.push("/"); 
+            router.replace("/dashboard"); 
           }
         }
       } catch (error) {
         console.error("Initialization error", error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
   }, [courseId, router]);
 
-  // 🎟️ Apply Coupon Logic
   const handleApplyCoupon = async () => {
     if (!couponInput || !currentUser) return;
     setIsApplyingCoupon(true);
@@ -95,7 +100,7 @@ export default function CheckoutPage() {
       const res = await fetch("/api/coupon/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: couponInput, courseId: course.courseId, userId: currentUser.uid })
+        body: JSON.stringify({ code: couponInput, courseId: course.courseId || course.id, userId: currentUser.uid })
       });
       const data = await res.json();
 
@@ -118,9 +123,8 @@ export default function CheckoutPage() {
     setCouponError("");
   };
 
-  // 💸 Pay via Razorpay Logic
   const handlePayment = async () => {
-    if (!currentUser) return;
+    if (!currentUser || !course) return;
 
     setIsProcessing(true);
     const isScriptLoaded = await loadRazorpayScript();
@@ -131,16 +135,20 @@ export default function CheckoutPage() {
     }
 
     try {
-      // 1. Create Order via Backend
+      const targetCourseId = course.courseId || course.id;
+      
+      // 🔥 NEW: Sending selectedAiPlan to Backend
       const orderRes = await fetch("/api/payment/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          courseId: course.courseId, 
+          courseId: targetCourseId, 
           userId: currentUser.uid,
-          appliedCouponCode: appliedDiscount > 0 ? couponInput : null 
+          appliedCouponCode: appliedDiscount > 0 ? couponInput : null,
+          aiPlan: selectedAiPlan 
         })
       });
+      
       const orderData = await orderRes.json();
       
       if (!orderData.success) {
@@ -149,7 +157,6 @@ export default function CheckoutPage() {
         return;
       }
 
-      // 2. Open Razorpay Checkout Window
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID, 
         amount: orderData.order.amount,
@@ -158,7 +165,6 @@ export default function CheckoutPage() {
         description: `Enrollment: ${course.title}`,
         order_id: orderData.order.id,
         handler: async function (response: any) {
-          // 3. Verify Payment
           const verifyRes = await fetch("/api/payment/verify", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -167,13 +173,14 @@ export default function CheckoutPage() {
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
               userId: currentUser.uid,
-              courseId: course.courseId
+              courseId: targetCourseId,
+              aiPlan: selectedAiPlan // 🔥 Save this plan after verification
             })
           });
           const verifyData = await verifyRes.json();
           if (verifyData.success) {
             alert("🎉 Payment Successful! Welcome to the Academy.");
-            router.push("/dashboard"); // Take them to Student Dashboard
+            router.push("/dashboard"); 
           } else {
             alert("Payment Verification Failed!");
           }
@@ -205,18 +212,29 @@ export default function CheckoutPage() {
   };
 
   if (loading) {
-    return <div className="min-h-screen bg-[#020604] flex flex-col items-center justify-center gap-4"><Loader2 className="w-10 h-10 text-emerald-500 animate-spin" /><p className="text-emerald-400 text-sm font-bold animate-pulse">Securing Checkout...</p></div>;
+    return (
+      <div className="min-h-screen bg-[#020604] flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-10 h-10 text-emerald-500 animate-spin" />
+        <p className="text-emerald-400 text-sm font-bold animate-pulse">Securing Checkout...</p>
+      </div>
+    );
   }
 
   if (!course || !currentUser) return null;
 
-  // Calculate Prices
-  const basePrice = parseInt(course.price.replace(/\D/g, ""), 10);
+  // 🤖 🔥 NEW: Dynamic Pricing Calculation based on Selected Tier
+  let activePriceString = course.price;
+  if (selectedAiPlan === "basic" && course.priceBasic) activePriceString = course.priceBasic;
+  if (selectedAiPlan === "plus" && course.pricePlus) activePriceString = course.pricePlus;
+  if (selectedAiPlan === "pro" && course.pricePro) activePriceString = course.pricePro;
+
+  const rawPriceString = activePriceString ? activePriceString.toString() : "0";
+  const basePrice = parseInt(rawPriceString.replace(/\D/g, ""), 10) || 0;
   const discountAmount = appliedDiscount > 0 ? Math.round((basePrice * appliedDiscount) / 100) : 0;
   const finalPrice = basePrice - discountAmount;
 
   return (
-    <div className="min-h-screen bg-[#020604] text-white font-sans selection:bg-emerald-500/30">
+    <div className="min-h-screen bg-[#020604] text-white font-sans selection:bg-emerald-500/30 pb-20">
       
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute top-[-10%] left-[20%] w-[50vw] h-[50vw] bg-emerald-700/10 rounded-full blur-[150px] mix-blend-screen" />
@@ -234,44 +252,91 @@ export default function CheckoutPage() {
 
       <main className="relative z-10 max-w-6xl mx-auto px-4 py-8 md:py-12 flex flex-col lg:flex-row gap-8 lg:gap-12 items-start">
         
-        {/* ================= LEFT: COURSE SUMMARY ================= */}
-        <div className="w-full lg:w-7/12 space-y-6">
+        {/* ================= LEFT: COURSE & TIER SELECTION ================= */}
+        <div className="w-full lg:w-7/12 space-y-8">
           <div>
             <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-2">Complete your Enrollment</h1>
             <p className="text-gray-400 text-sm md:text-base">You are just one step away from unlocking the ultimate AI clinical ecosystem.</p>
           </div>
 
           <div className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8 backdrop-blur-xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-[60px]" />
+            <span className="text-emerald-400 font-bold text-xs uppercase tracking-widest">{course.prof || "BAMS Scholar"}</span>
+            <h2 className="text-2xl font-black mt-1 mb-4">{course.title}</h2>
             
-            <span className="text-emerald-400 font-bold text-xs uppercase tracking-widest">{course.prof}</span>
-            <h2 className="text-2xl font-black mt-1 mb-6">{course.title}</h2>
-
-            <div className="space-y-3 border-y border-white/10 py-6 mb-6">
-              <h4 className="text-sm font-bold text-gray-300 uppercase tracking-widest mb-4">What's included in {course.duration}:</h4>
+            <div className="space-y-3 border-t border-white/10 pt-4">
+              <h4 className="text-sm font-bold text-gray-300 uppercase tracking-widest mb-3">What's included:</h4>
               {course.syllabus?.map((item: string, i: number) => (
                 <div key={i} className="flex items-start gap-3 text-sm text-gray-400">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" /> {item}
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> {item}
                 </div>
               ))}
-              <div className="flex items-start gap-3 text-sm text-gray-400">
-                <Sparkles className="w-5 h-5 text-emerald-500 shrink-0" /> Samhita AI Smart Reader Access
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 text-xs text-gray-500 font-bold">
-              <Lock className="w-4 h-4 text-gray-400" />
-              100% Secure Payment • Strict 5-Day Money Back Guarantee
             </div>
           </div>
+
+          {/* 🤖 🔥 NEW: TIER SELECTION UI */}
+          {(course.aiSettings?.isAiEnabled || course.priceBasic || course.pricePlus || course.pricePro) && (
+            <div className="space-y-4">
+              <h3 className="text-xl font-black flex items-center gap-2"><Bot className="w-6 h-6 text-emerald-400"/> Choose Your Power-Up</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Standard Course Card */}
+                <div 
+                  onClick={() => setSelectedAiPlan("none")}
+                  className={`cursor-pointer border-2 rounded-2xl p-5 transition-all ${selectedAiPlan === "none" ? 'border-emerald-500 bg-emerald-950/20' : 'border-gray-800 bg-black/40 hover:border-gray-600'}`}
+                >
+                  <h4 className="font-bold text-white mb-1">Standard Access</h4>
+                  <p className="text-xs text-gray-400 mb-3">Course content only. No AI assistant.</p>
+                  <p className="text-lg font-black text-emerald-400">{course.price}</p>
+                </div>
+
+                {/* AI Basic Card */}
+                {course.priceBasic && (
+                  <div 
+                    onClick={() => setSelectedAiPlan("basic")}
+                    className={`cursor-pointer border-2 rounded-2xl p-5 transition-all relative ${selectedAiPlan === "basic" ? 'border-blue-500 bg-blue-950/20' : 'border-gray-800 bg-black/40 hover:border-gray-600'}`}
+                  >
+                    <h4 className="font-bold text-blue-400 mb-1">AI Basic</h4>
+                    <p className="text-xs text-gray-400 mb-3">Basic text-based AI assistance (Flash-Lite).</p>
+                    <p className="text-lg font-black text-white">{course.priceBasic}</p>
+                  </div>
+                )}
+
+                {/* AI Plus Card */}
+                {course.pricePlus && (
+                  <div 
+                    onClick={() => setSelectedAiPlan("plus")}
+                    className={`cursor-pointer border-2 rounded-2xl p-5 transition-all relative ${selectedAiPlan === "plus" ? 'border-indigo-500 bg-indigo-950/20' : 'border-gray-800 bg-black/40 hover:border-gray-600'}`}
+                  >
+                    <span className="absolute -top-3 right-4 bg-indigo-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest">Recommended</span>
+                    <h4 className="font-bold text-indigo-400 mb-1">AI Plus</h4>
+                    <p className="text-xs text-gray-400 mb-3">Advanced Clinical Reasoning AI (Flash).</p>
+                    <p className="text-lg font-black text-white">{course.pricePlus}</p>
+                  </div>
+                )}
+
+                {/* AI Pro Card */}
+                {course.pricePro && (
+                  <div 
+                    onClick={() => setSelectedAiPlan("pro")}
+                    className={`cursor-pointer border-2 rounded-2xl p-5 transition-all relative ${selectedAiPlan === "pro" ? 'border-purple-500 bg-purple-950/20' : 'border-gray-800 bg-black/40 hover:border-gray-600'}`}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent rounded-2xl pointer-events-none"/>
+                    <span className="absolute -top-3 right-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest shadow-[0_0_10px_rgba(168,85,247,0.5)]">Ultimate</span>
+                    <h4 className="font-bold text-purple-400 mb-1 flex items-center gap-1"><Sparkles className="w-4 h-4"/> AI Pro</h4>
+                    <p className="text-xs text-gray-400 mb-3">Live Voice & Image Analysis AI Model.</p>
+                    <p className="text-lg font-black text-white">{course.pricePro}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ================= RIGHT: PAYMENT & USER DETAILS ================= */}
-        <div className="w-full lg:w-5/12 bg-[#050B08] border border-emerald-500/30 rounded-3xl p-6 md:p-8 shadow-[0_20px_50px_rgba(16,185,129,0.1)]">
+        <div className="w-full lg:w-5/12 bg-[#050B08] border border-emerald-500/30 rounded-3xl p-6 md:p-8 shadow-[0_20px_50px_rgba(16,185,129,0.1)] sticky top-6">
           
           <h3 className="text-xl font-black mb-4">Scholar Details</h3>
           
-          {/* 🔥 READ-ONLY USER INFO CARD 🔥 */}
           <div className="bg-black/40 border border-gray-800 rounded-xl p-4 mb-8 space-y-3">
             <div className="flex items-center gap-3 text-sm text-white">
               <UserCircle className="w-4 h-4 text-emerald-500" /> {currentUser.name}
@@ -282,26 +347,33 @@ export default function CheckoutPage() {
             <div className="flex items-center gap-3 text-sm text-gray-400">
               <Phone className="w-4 h-4 text-emerald-500" /> {currentUser.mobile || "N/A"}
             </div>
-            <p className="text-[10px] text-gray-500 italic pt-2 border-t border-gray-800 mt-2">These details are auto-synced from your profile.</p>
           </div>
 
           <h3 className="text-xl font-black mb-4">Order Summary</h3>
           <div className="space-y-3 text-sm mb-6 pb-6 border-b border-white/10">
             <div className="flex justify-between text-gray-400">
-              <span>Course Fee</span>
+              <span>{course.title}</span>
               <span>₹{basePrice}</span>
             </div>
             
+            {/* 🔥 NEW: Show selected Tier info in receipt */}
+            {selectedAiPlan !== "none" && (
+              <div className="flex justify-between text-blue-400 font-bold">
+                <span>AI Tier Add-on</span>
+                <span className="uppercase text-[10px] bg-blue-500/20 px-2 py-0.5 rounded">{selectedAiPlan}</span>
+              </div>
+            )}
+            
             {appliedDiscount > 0 && (
-              <div className="flex justify-between text-emerald-400 font-bold bg-emerald-900/20 p-2 -mx-2 rounded-lg">
+              <div className="flex justify-between text-emerald-400 font-bold bg-emerald-900/20 p-2 -mx-2 rounded-lg mt-2">
                 <span>Coupon Discount ({appliedDiscount}%)</span>
                 <span>- ₹{discountAmount}</span>
               </div>
             )}
             
-            <div className="flex justify-between text-lg font-black text-white pt-2">
+            <div className="flex justify-between text-xl font-black text-white pt-3 border-t border-gray-800 mt-2">
               <span>Total Amount</span>
-              <span>₹{finalPrice}</span>
+              <span className="text-emerald-400">₹{finalPrice}</span>
             </div>
           </div>
 
@@ -326,7 +398,6 @@ export default function CheckoutPage() {
               )}
             </div>
             {couponError && <p className="text-red-400 text-xs mt-2 flex items-center gap-1"><AlertCircle className="w-3 h-3"/> {couponError}</p>}
-            {appliedDiscount > 0 && <p className="text-emerald-400 text-xs mt-2 font-bold flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> Coupon Applied Successfully!</p>}
           </div>
 
           {/* Checkout Button */}
@@ -339,7 +410,9 @@ export default function CheckoutPage() {
             {isProcessing ? "Processing Secure Payment..." : `Pay ₹${finalPrice} Securely`}
           </button>
           
-          <p className="text-center text-[10px] text-gray-500 mt-4">By proceeding, you agree to our Terms of Service & Privacy Policy.</p>
+          <div className="flex items-center justify-center gap-3 mt-4 text-[10px] text-gray-500 font-bold uppercase tracking-widest">
+            <Lock className="w-3 h-3"/> 256-Bit Encryption
+          </div>
         </div>
       </main>
     </div>

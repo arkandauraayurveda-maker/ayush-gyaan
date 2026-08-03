@@ -8,7 +8,9 @@ import {
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
-  sendPasswordResetEmail // 🔥 NEW: Forgot Password functionality
+  sendPasswordResetEmail,
+  setPersistence, // 🔥 NEW: Security Import
+  browserSessionPersistence // 🔥 NEW: Tab-close logout Import
 } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -28,7 +30,6 @@ export default function LoginPage() {
   // 🧠 The Bridge: Firebase to MongoDB Sync
   const syncWithDatabaseAndRedirect = async (firebaseUser: any) => {
     try {
-      // 1. Call our new Sync API
       const res = await fetch('/api/auth/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -45,12 +46,15 @@ export default function LoginPage() {
         throw new Error(data.error || "Failed to sync with database");
       }
 
+      // 🔥 SMART UX: URL se redirect link ko extract karo
+      const urlParams = new URLSearchParams(window.location.search);
+      const redirectUrl = urlParams.get('redirect');
+
       // 2. Smart Routing based on Onboarding Status
-      // Agar user naya hai ya usne form nahi bhara hai, toh Onboarding par bhejo
       if (data.isNewUser || data.user?.isOnboarded === false) {
-        router.push("/onboarding");
+        router.push(redirectUrl ? `/onboarding?redirect=${encodeURIComponent(redirectUrl)}` : "/onboarding");
       } else {
-        router.push("/dashboard"); // Purana user jiska form bhara hua hai
+        router.push(redirectUrl ? redirectUrl : "/dashboard"); 
       }
 
     } catch (err: any) {
@@ -68,6 +72,9 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
+      // 🔥 SECURITY UPDATE: Tab close = Auto Logout
+      await setPersistence(auth, browserSessionPersistence);
+
       let userCredential;
       if (view === "login") {
         userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -99,7 +106,7 @@ export default function LoginPage() {
       await sendPasswordResetEmail(auth, email);
       setSuccessMsg("Password reset link sent! Check your inbox.");
       setIsLoading(false);
-      setTimeout(() => setView("login"), 3000); // 3 second baad wapas login par le jao
+      setTimeout(() => setView("login"), 3000); 
     } catch (err: any) {
       setError(err.message.replace("Firebase: ", "").replace("Error (auth/", "").replace(").", ""));
       setIsLoading(false);
@@ -114,6 +121,9 @@ export default function LoginPage() {
     const provider = new GoogleAuthProvider();
     
     try {
+      // 🔥 SECURITY UPDATE: Tab close = Auto Logout
+      await setPersistence(auth, browserSessionPersistence);
+
       const userCredential = await signInWithPopup(auth, provider);
       await syncWithDatabaseAndRedirect(userCredential.user);
     } catch (err: any) {
