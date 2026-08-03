@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Order not found in DB" }, { status: 404 });
     }
 
-    let updateQuery: any = { $set: {} };
+    const updateQuery: any = { $set: {} };
 
     // 3. 🎓 GRANT COURSE ACCESS (सिर्फ़ तब, जब courseId मौजूद हो)
     if (courseId) {

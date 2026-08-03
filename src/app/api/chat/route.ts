@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     await connectToDatabase();
 
     // 👤 2. FETCH USER & ADMIN SETTINGS
-    let user = await User.findOne({ uid: decodedToken.uid });
+    const user = await User.findOne({ uid: decodedToken.uid });
     if (!user) return NextResponse.json({ success: false, error: "उपयोगकर्ता नहीं मिला (User not found)" }, { status: 404 });
 
     const settings = await SystemSettings.findOne({ settingId: "global_settings" });
@@ -101,9 +101,9 @@ export async function POST(req: NextRequest) {
 
         if (directShlokas && directShlokas.length > 0) {
           // श्लोक के टुकड़ों (F, E, a, b) को आपस में जोड़ें
-          let fullOriginalShloka = directShlokas.map(s => s.originalShloka).join("\n");
-          let fullTranslation = directShlokas[0].translationHindi || "";
-          let samhitaInfo = `${directShlokas[0].samhitaName || 'संहिता'} (${directShlokas[0].sthana || 'स्थान'}), अध्याय: ${directShlokas[0].chapter}, श्लोक: ${shlokaNo}`;
+          const fullOriginalShloka = directShlokas.map(s => s.originalShloka).join("\n");
+          const fullTranslation = directShlokas[0].translationHindi || "";
+          const samhitaInfo = `${directShlokas[0].samhitaName || 'संहिता'} (${directShlokas[0].sthana || 'स्थान'}), अध्याय: ${directShlokas[0].chapter}, श्लोक: ${shlokaNo}`;
 
           // बिना AI कॉल किए सीधा रिस्पॉन्स भेज दें! (🔥 100% API Cost Saved)
           const directReply = `📚 **संदर्भ:** ${samhitaInfo}\n\n> 📜 **मूल श्लोक:**\n> ${fullOriginalShloka}\n\n🌿 **भावार्थ:**\n${fullTranslation}`;
@@ -178,7 +178,7 @@ ${retrievedSlokas}
     }
 
     // 🧠 9. HISTORY SANITIZATION (BULLETPROOF LOGIC)
-    let sanitizedHistory: any[] = [];
+    const sanitizedHistory: any[] = [];
     if (Array.isArray(history)) {
       const rawHistory = history
         .filter((msg: any) => msg && msg.role && !msg.content?.includes("⚠️"))

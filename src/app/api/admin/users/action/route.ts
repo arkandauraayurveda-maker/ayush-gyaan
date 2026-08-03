@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
       // ... (बाकी का कोड एकदम सेम रहेगा)
 
       // 2. Tier Update
-      let finalTier = (tier || planType || user.aiPlan?.tier || "basic").toLowerCase();
+      const finalTier = (tier || planType || user.aiPlan?.tier || "basic").toLowerCase();
 
       // 3. Tokens Update
       let finalTokens = tokens !== undefined ? Number(tokens) : user.aiPlan?.tokens;

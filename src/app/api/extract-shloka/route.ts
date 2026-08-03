@@ -28,7 +28,7 @@ async function generateWithFallback(systemPrompt: string, pdfPart: any) {
   let lastError;
   // Har ek nayi request (file/section extraction) ke liye fresh local copy banegi, 
   // jisse har request ki shuruwat me saare models original order me dobara try honge.
-  let activeModels = [...MODEL_FALLBACK_LIST];
+  const activeModels = [...MODEL_FALLBACK_LIST];
 
   for (const modelName of activeModels) {
     try {
