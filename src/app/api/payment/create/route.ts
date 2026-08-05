@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import connectToDatabase from "@/lib/mongodb";
+import User from "@/models/User";
 import Course from "@/models/Course";
 import Order from "@/models/Order";
 import Coupon from "@/models/Coupon";
@@ -13,7 +14,7 @@ const razorpay = new Razorpay({
 
 export async function POST(req: NextRequest) {
   try {
-    const { courseId, userId, appliedCouponCode, aiPlan } = await req.json();
+    const { courseId, userId, appliedCouponCode, aiPlan, billingCycle } = await req.json();
     
     if (!userId) {
       return NextResponse.json({ error: "User ID is required" }, { status: 400 });
@@ -21,8 +22,36 @@ export async function POST(req: NextRequest) {
 
     await connectToDatabase();
 
+    const userDoc = await User.findOne({ uid: userId });
+
+    // 🛡️ PREVENT DUPLICATE COURSE ENROLLMENT
+    if (courseId && userDoc) {
+      const alreadyHasCourse = userDoc.purchasedCourses?.some(
+        (c: any) => c.courseId === courseId && c.status === "ACTIVE"
+      );
+      if (alreadyHasCourse) {
+        return NextResponse.json({
+          error: "You are already enrolled in this course! Access your modules from the Student Dashboard."
+        }, { status: 400 });
+      }
+    }
+
+    // 🛡️ PREVENT DUPLICATE / DOWNGRADE AI PLAN PURCHASE
+    if (aiPlan && !courseId && userDoc) {
+      const currentTier = (userDoc.aiPlan?.tier || "basic").toLowerCase();
+      const requestedTier = aiPlan.toLowerCase();
+      const tierRank: Record<string, number> = { free: 0, basic: 1, plus: 2, pro: 3 };
+
+      if ((tierRank[requestedTier] || 0) <= (tierRank[currentTier] || 0)) {
+        return NextResponse.json({
+          error: `You already have an active subscription for Ayush ${currentTier.toUpperCase()} Plan (or higher)!`
+        }, { status: 400 });
+      }
+    }
+
     let finalAmount = 0;
     let originalBaseAmount = 0;
+    const cycle = billingCycle === "annual" || billingCycle === "yearly" ? "annual" : "monthly";
 
     // =========================================================
     // 🛤️ CASE 1: COURSE CHECKOUT
@@ -79,16 +108,26 @@ export async function POST(req: NextRequest) {
       }
     } 
     // =========================================================
-    // 🛤️ CASE 2: STANDALONE AI UPGRADE
+    // 🛤️ CASE 2: STANDALONE AI PLAN UPGRADE (MONTHLY vs ANNUAL)
     // =========================================================
     else if (aiPlan) {
       const settings = await SystemSettings.findOne({ settingId: "global_settings" });
-      const pricing = settings?.aiPricing || { basic: 49, plus: 199, pro: 499 };
+      const pricing = settings?.aiPricing || { 
+        basic: { monthly: 0, yearly: 0 }, 
+        plus: { monthly: 199, yearly: 1999 }, 
+        pro: { monthly: 499, yearly: 4999 } 
+      };
       
-      if (aiPlan === "basic") finalAmount = pricing.basic || 49;
-      else if (aiPlan === "plus") finalAmount = pricing.plus || 199;
-      else if (aiPlan === "pro") finalAmount = pricing.pro || 499;
-      else return NextResponse.json({ error: "Invalid AI Plan selected" }, { status: 400 });
+      const planKey = aiPlan.toLowerCase();
+      const planObj = pricing[planKey];
+
+      if (typeof planObj === "number") {
+        finalAmount = cycle === "annual" ? planObj * 12 : planObj;
+      } else if (planObj && typeof planObj === "object") {
+        finalAmount = cycle === "annual" ? (planObj.yearly || planObj.monthly * 12) : (planObj.monthly || 199);
+      } else {
+        finalAmount = planKey === "pro" ? (cycle === "annual" ? 4999 : 499) : (cycle === "annual" ? 1999 : 199);
+      }
     } 
     else {
       return NextResponse.json({ error: "Either Course ID or AI Plan is required" }, { status: 400 });
@@ -109,13 +148,13 @@ export async function POST(req: NextRequest) {
         courseId: courseId || "none",
         userId, 
         aiPlan: aiPlan || "none",
+        billingCycle: cycle,
         appliedCouponCode: appliedCouponCode || "none"
       }
     };
 
     const rzpOrder = await razorpay.orders.create(options);
 
-    // Save Pending Order
     const newOrder = new Order({
       userId,
       courseId: courseId || null,

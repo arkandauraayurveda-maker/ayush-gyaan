@@ -5,6 +5,23 @@ import User from "@/models/User";
 import SystemSettings from "@/models/SystemSettings";
 import Shloka from "@/models/Shloka";
 import { adminAuth } from "@/lib/firebaseAdmin";
+import AIChatLog from "@/models/AIChatLog";
+
+const VALID_MODEL_MAPPING: Record<string, string> = {
+  "basic": "gemini-1.5-flash-8b",
+  "plus": "gemini-1.5-flash",
+  "pro": "gemini-1.5-pro"
+};
+
+/**
+ * Uses configured model name directly, fallback only if completely empty.
+ */
+function sanitizeModelName(configuredName?: string, fallbackTier: string = "basic"): string {
+  if (!configuredName || typeof configuredName !== "string" || !configuredName.trim()) {
+    return VALID_MODEL_MAPPING[fallbackTier] || "gemini-1.5-flash";
+  }
+  return configuredName.trim();
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,18 +51,16 @@ export async function POST(req: NextRequest) {
 
     const settings = await SystemSettings.findOne({ settingId: "global_settings" });
 
-    const adminLimits = settings?.aiLimits || { basic: 10, plus: 100, pro: 9999 };
     const adminModels = settings?.aiModels || {
       basic: "gemini-1.5-flash-8b",
       plus: "gemini-1.5-flash",
       pro: "gemini-1.5-pro"
     };
 
-    // 🕒 3. PLAN EXPIRY & DAILY TOKEN RESET (WITH NEW USER FIX)
+    // 🕒 3. PLAN EXPIRY & DAILY TOKEN RESET
     let currentTier = (user.aiPlan?.tier || "basic").toLowerCase();
     if (currentTier === "free") currentTier = "basic";
 
-    // Auto-Downgrade Expiry Check
     if ((currentTier === "plus" || currentTier === "pro") && user.aiPlan?.validityEnd) {
       if (new Date() > new Date(user.aiPlan.validityEnd)) {
         currentTier = "basic";
@@ -59,7 +74,6 @@ export async function POST(req: NextRequest) {
     const today = new Date().setHours(0, 0, 0, 0);
     const lastActive = user.aiPlan?.lastActiveDate ? new Date(user.aiPlan.lastActiveDate).setHours(0, 0, 0, 0) : 0;
     
-    // Check limit based on request type
     const defaultTextLimits: Record<string, number> = { basic: 10, plus: 100, pro: 9999 };
     const defaultMultimodalLimits: Record<string, number> = { basic: 3, plus: 25, pro: 9999 };
 
@@ -102,7 +116,6 @@ export async function POST(req: NextRequest) {
     // 🚀 6. SMART ROUTER: DIRECT DB FETCH (API COST SAVER)
     // ==========================================
     if (!image && message) {
-      // यह Regex '1/15', '1.15', 'अध्याय 1 श्लोक 15' जैसे पैटर्न को पकड़ेगा
       const shlokaPattern = /(?:अध्याय|chapter|ch)?\s*(\d+)\s*(?:श्लोक|shloka|[\/\.\-])\s*(\d+[a-zA-Z]*)/i;
       const match = message.match(shlokaPattern);
 
@@ -110,25 +123,22 @@ export async function POST(req: NextRequest) {
         const chapterNo = match[1];
         const shlokaNo = match[2];
 
-        // सीधा MongoDB में सर्च करें (बिना AI के)
         const directShlokas = await Shloka.find({
           chapter: chapterNo,
-          shlokaNumber: new RegExp("^" + shlokaNo, "i") // 'a', 'b', 'F', 'E' को भी कवर करेगा
+          shlokaNumber: new RegExp("^" + shlokaNo, "i")
         }).limit(5);
 
         if (directShlokas && directShlokas.length > 0) {
-          // श्लोक के टुकड़ों (F, E, a, b) को आपस में जोड़ें
           const fullOriginalShloka = directShlokas.map(s => s.originalShloka).join("\n");
           const fullTranslation = directShlokas[0].translationHindi || "";
           const samhitaInfo = `${directShlokas[0].samhitaName || 'संहिता'} (${directShlokas[0].sthana || 'स्थान'}), अध्याय: ${directShlokas[0].chapter}, श्लोक: ${shlokaNo}`;
 
-          // बिना AI कॉल किए सीधा रिस्पॉन्स भेज दें! (🔥 100% API Cost Saved)
           const directReply = `📚 **संदर्भ:** ${samhitaInfo}\n\n> 📜 **मूल श्लोक:**\n> ${fullOriginalShloka}\n\n🌿 **भावार्थ:**\n${fullTranslation}`;
 
           return NextResponse.json({
             success: true,
             reply: directReply,
-            remainingTokens: availableTokens // AI यूज़ नहीं हुआ, इसलिए टोकन नहीं काटे
+            remainingTokens: availableTokens
           });
         }
       }
@@ -170,35 +180,34 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // 🔥 8. THE FREE-FLOW GURU PROMPT (NO RESTRICTIONS) 🔥
-      finalSystemInstruction = `आप 'आयुष-ज्ञान AI' हैं। आप आयुर्वेद के एक अत्यंत विद्वान, स्नेही और विद्यार्थी-मित्र BAMS प्रोफेसर हैं। 
+      finalSystemInstruction = `आप 'आयुष-ज्ञान AI' हैं—एक friendly, casual और supportive BAMS AI Study Companion। 
 
-आपका एकमात्र लक्ष्य छात्रों को आयुर्वेद का प्रामाणिक ज्ञान देना है। 
-आपको उत्तर देने की पूरी स्वतंत्रता है—प्रश्न के अनुसार उत्तर की लंबाई, शैली और संरचना (Format) आप स्वयं तय करें। 
+छात्र से बात करते समय भारी-भरकम, कठिन हिंदी या क्लिष्ट संस्कृत वाक्यांशों (जैसे 'अत्यंत विद्वान', 'स्नेही', 'संहिता की गहराइयों') का प्रयोग न करें। सरल, प्राकृतिक Hinglish या आसान हिंदी में बातचीत करें जैसे एक हेल्पफुल सीनियर छात्र या फ्रेंडली मेंटर बात करता है।
 
-परंतु, इन तीन कठोर नियमों (CRITICAL RULES) का 100% पालन करना अनिवार्य है:
+इन नियमों का 100% पालन करें:
 
-1. **शून्य मनगढ़ंत ज्ञान (100% DB Strictness):**
-   आपको अपना संपूर्ण उत्तर केवल और केवल नीचे दिए गए "Retrieved Database Context" और उसके "मेटा-टैग्स" के आधार पर ही बनाना है। अपनी ओर से कोई बाहरी श्लोक, मनगढ़ंत जानकारी या दवा (Prescription) बिल्कुल न जोड़ें। यदि जानकारी Context में नहीं है, तो विनम्रता से कहें: "प्रिय विद्यार्थी, मेरा ज्ञान अभी उपलब्ध डिजिटल संहिताओं तक सीमित है।"
+1. **फ्रेंडली टोन और नाम का उपयोग:**
+   यदि यूजर का नाम दिया गया हो तो उसका उपयोग करें। बातचीत सरल, सहज और दोस्ताना (casual & encouraging) रखें।
 
-2. **श्लोक एकत्रीकरण (The Stitching Logic):**
-   यदि Context में श्लोक के खंड हैं (जैसे '14F' और '14E', या '52a' और '52b'), तो उन्हें आपस में जोड़कर एक पूर्ण और सुंदर श्लोक के रूप में प्रस्तुत करें। छात्र को कभी भी 'F', 'E', 'a', 'b' जैसे कोड न दिखाएँ।
+2. **आयुर्वेदिक शब्दावली की 100% शुद्धता (Strict Terminology Rule):**
+   सभी आयुर्वेदिक पदों (जैसे वात, पित्त, कफ, त्रिदोष, अग्नि, स्रोतस, धातु, दूष्य, ओज, निदान, सम्प्राप्ति, उपशय, चिकित्सा सूत्र, रस-पंचक आदि) को 100% वैसा ही रखें। उनमें न तो अपनी तरफ से कोई बदलाव करें और न ही उनका अंग्रेजी में अनुवाद करें।
 
-3. **गुरु का स्वभाव और स्पष्टता (Persona & Clarity):**
-   - आयुर्वेदिक शब्दों (वात, पित्त, स्रोतस आदि) का सम्मान करें, उनका अंग्रेजी अनुवाद न करें। 
-   - यदि छात्र किसी विषय को समझने में कठिनाई महसूस कर रहा हो, तो उसे एक गुरु की भांति सरल भाषा, बुलेट पॉइंट्स या किसी स्मरण-सूत्र (Mnemonic) के माध्यम से समझाएं। 
-   - श्लोकों को हमेशा "> blockquote" में दर्शाएं ताकि वे सुंदर दिखें।
+3. **शून्य मनगढ़ंत ज्ञान (100% DB Strictness):**
+   आपका संपूर्ण उत्तर केवल और केवल नीचे दिए गए "Retrieved Database Context" और उसके "मेटा-टैग्स" के आधार पर होना चाहिए। अपनी ओर से कोई बाहरी मनगढ़ंत जानकारी या दवा (Prescription) न जोड़ें। यदि जानकारी Context में न हो, तो सरलता से कहें: "यह टॉपिक अभी डिजिटल संहिताओं में लोड हो रहा है, थोड़ा इंतजार करें।"
+
+4. **श्लोक प्रदर्शन:**
+   श्लोक के खंडों को जोड़कर सुंदर पूर्ण रूप में प्रस्तुत करें और श्लोकों को हमेशा "> blockquote" में दिखाएं।
 
 === Retrieved Database Context ===
 ${retrievedSlokas}
-==================================`;
+================ failure instructions ==================`;
     }
 
-    // 🧠 9. HISTORY SANITIZATION (BULLETPROOF LOGIC)
+    // 🧠 9. HISTORY SANITIZATION
     const sanitizedHistory: any[] = [];
     if (Array.isArray(history)) {
       const rawHistory = history
-        .filter((msg: any) => msg && msg.role && !msg.content?.includes("⚠️"))
+        .filter((msg: any) => msg && msg.role && !msg.content?.includes("⚠️") && !msg.content?.includes("अपग्रेड"))
         .map((msg: any) => ({
           role: (msg.role === "assistant" || msg.role === "model") ? "model" : "user",
           parts: [{ text: msg.content || (msg.parts?.[0]?.text) || "" }]
@@ -216,13 +225,20 @@ ${retrievedSlokas}
       }
     }
 
-    // ⚙️ 10. AI ENGINE EXECUTION (WITH SILENT FALLBACK)
+    // ⚙️ 10. AI ENGINE EXECUTION (PASSED SYSTEM INSTRUCTION INTO GETGENERATIVEMODEL & SAFE MODEL SANITIZING)
     const primaryModelName = adminModels[currentTier] || "gemini-1.5-flash";
     const basicModelName = adminModels["basic"] || "gemini-1.5-flash-8b";
     let finalAiReply = "";
 
-    const generateAIResponse = async (modelName: string) => {
-      const chatModel = genAI.getGenerativeModel({ model: modelName });
+    const generateAIResponse = async (modelName: string, tierKey: string) => {
+      const safeModel = sanitizeModelName(modelName, tierKey);
+      
+      // 🔥 FIX: Pass systemInstruction directly inside getGenerativeModel
+      const chatModel = genAI.getGenerativeModel({ 
+        model: safeModel,
+        systemInstruction: finalSystemInstruction
+      });
+
       if (image) {
         const base64Data = image.split(',')[1];
         const res = await chatModel.generateContent([
@@ -232,8 +248,7 @@ ${retrievedSlokas}
         return res.response.text();
       } else {
         const chat = chatModel.startChat({
-          history: sanitizedHistory,
-          systemInstruction: finalSystemInstruction
+          history: sanitizedHistory
         });
         
         const res = await chat.sendMessage(message);
@@ -242,22 +257,33 @@ ${retrievedSlokas}
     };
 
     try {
-      finalAiReply = await generateAIResponse(primaryModelName);
-    } catch (primaryError) {
-      console.warn(`[AI Engine] Primary model ${primaryModelName} failed. Silently falling back to basic.`);
+      finalAiReply = await generateAIResponse(primaryModelName, currentTier);
+    } catch (primaryError: any) {
+      console.warn(`[AI Engine] Primary model '${primaryModelName}' failed. Error: ${primaryError?.message}. Silently falling back to basic model.`);
       try {
-        finalAiReply = await generateAIResponse(basicModelName);
-      } catch (fallbackError) {
+        finalAiReply = await generateAIResponse(basicModelName, "basic");
+      } catch (fallbackError: any) {
         console.error("AI Fallback failed:", fallbackError);
-        return NextResponse.json({ success: false, error: "आयुष-ज्ञान सर्वर वर्तमान में व्यस्त है। कृपया कुछ समय पश्चात प्रयास करें।" }, { status: 503 });
+        return NextResponse.json({ 
+          success: false, 
+          error: "आयुष-ज्ञान AI सर्वर वर्तमान में उपलब्ध नहीं है। कृपया कुछ समय पश्चात पुनः प्रयास करें।" 
+        }, { status: 503 });
       }
     }
 
-    // 📉 11. DEDUCT TOKEN & RETURN SUCCESS
+    // 📉 11. DEDUCT TOKEN & LOG CHAT FOR ADMIN ANALYTICS
     await User.findOneAndUpdate(
       { uid: decodedToken.uid },
       { $inc: { "aiPlan.tokens": -1 } }
     );
+
+    AIChatLog.create({
+      userId: decodedToken.uid,
+      userMessage: message || "Image Query",
+      aiResponse: finalAiReply,
+      modelUsed: primaryModelName,
+      isExactMatch: false
+    }).catch((err: any) => console.error("AIChatLog save error:", err));
 
     return NextResponse.json({
       success: true,
@@ -267,6 +293,6 @@ ${retrievedSlokas}
 
   } catch (error: any) {
     console.error("Master AI Router Error:", error);
-    return NextResponse.json({ success: false, error: "आंतरिक सर्वर त्रुटि (Internal Server Error)। कृपया पुनः प्रयास करें।" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "आंतरिक सर्ver त्रुटि (Internal Server Error)। कृपया पुनः प्रयास करें।" }, { status: 500 });
   }
 }

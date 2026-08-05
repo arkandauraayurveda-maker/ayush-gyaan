@@ -18,6 +18,9 @@ export default function CurriculumPricing() {
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
+  const [userEnrolledCourseIds, setUserEnrolledCourseIds] = useState<string[]>([]);
+  const [userAiTier, setUserAiTier] = useState<string>("free");
+
   useEffect(() => {
     fetch("/api/courses/public")
       .then(res => res.json())
@@ -30,9 +33,34 @@ export default function CurriculumPricing() {
       })
       .catch(() => {})
       .finally(() => setIsLoadingCourses(false));
+
+    // Fetch user enrolled courses if logged in
+    const user = auth.currentUser;
+    if (user) {
+      user.getIdToken(false).then(token => {
+        fetch("/api/user/me", { headers: { Authorization: `Bearer ${token}` } })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success && data.user) {
+              const activeIds = (data.user.courses || [])
+                .filter((c: any) => c.status === "ACTIVE")
+                .map((c: any) => c.courseId);
+              setUserEnrolledCourseIds(activeIds);
+              setUserAiTier((data.user.aiPlan?.tier || "free").toLowerCase());
+            }
+          })
+          .catch(() => {});
+      }).catch(() => {});
+    }
   }, []);
 
   const openCheckout = (course: any) => {
+    const user = auth.currentUser;
+    if (!user) {
+      const targetCourseId = course.courseId || course._id;
+      window.location.href = `/login?redirect=${encodeURIComponent(`/#curriculum`)}`;
+      return;
+    }
     setSelectedCourse(course);
     setSelectedAiTier("none");
     setCouponInput(course.couponCode || "");
@@ -267,7 +295,11 @@ export default function CurriculumPricing() {
               )}
 
               {/* ACTION BUTTON */}
-              {course.isPreRegister || course.status === "PRE_REGISTER" ? (
+              {userEnrolledCourseIds.includes(course.courseId) ? (
+                <Link href="/dashboard/courses" className="w-full py-4 rounded-xl font-bold bg-emerald-950/60 text-emerald-400 border border-emerald-500/50 hover:bg-emerald-900/80 transition-all text-sm flex items-center justify-center gap-2 shadow-lg">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Enrolled & Active (Open Dashboard)
+                </Link>
+              ) : course.isPreRegister || course.status === "PRE_REGISTER" ? (
                 <a href="#early-bird" className="w-full py-4 rounded-xl font-bold bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/30 transition-all text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-500/10">
                   <Sparkles className="w-4 h-4" /> Pre-Register Spot
                 </a>

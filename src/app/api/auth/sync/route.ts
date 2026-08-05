@@ -22,7 +22,6 @@ export async function POST(req: NextRequest) {
 
     const { uid, email, name } = await req.json();
 
-    // If token was provided, enforce that caller can only sync their own profile
     if (verifiedUid && verifiedUid !== uid) {
       return NextResponse.json({ success: false, error: "Forbidden: Identity mismatch" }, { status: 403 });
     }
@@ -37,24 +36,46 @@ export async function POST(req: NextRequest) {
     await connectToDatabase();
 
     let user = await User.findOne({ uid: targetUid });
+    let isNewUser = false;
 
     if (!user) {
-      // 🔥 NEW: नए यूज़र को डिफ़ॉल्ट 'Free' टियर और 10 टोकन दें
+      isNewUser = true;
       user = new User({
-        uid, 
-        email, 
-        name,
+        uid: targetUid, 
+        email: targetEmail, 
+        name: name || "",
         isOnboarded: false,
-        aiPlan: { tier: 'free', tokens: 10 } 
+        aiPlan: { tier: 'free', tokens: 10, lastActiveDate: new Date() } 
       });
       await user.save();
-    } else if (!user.aiPlan || !user.aiPlan.tier) {
-      // अगर कोई पुराना यूज़र है जिसके पास प्लान नहीं है, तो उसे भी 10 टोकन दें
-      user.aiPlan = { tier: 'free', tokens: 10 };
-      await user.save();
+    } else {
+      let needsSave = false;
+      if (!user.aiPlan || !user.aiPlan.tier) {
+        user.aiPlan = { tier: 'free', tokens: 10, lastActiveDate: new Date() };
+        needsSave = true;
+      }
+      if (name && (!user.name || user.name === "")) {
+        user.name = name;
+        needsSave = true;
+      }
+      if (needsSave) {
+        await user.save();
+      }
     }
 
-    return NextResponse.json({ success: true, user }, { status: 200 });
+    return NextResponse.json({ 
+      success: true, 
+      isNewUser, 
+      user: {
+        uid: user.uid,
+        email: user.email,
+        name: user.name,
+        isOnboarded: Boolean(user.isOnboarded),
+        aiPlan: user.aiPlan,
+        role: user.role
+      } 
+    }, { status: 200 });
+
   } catch (error: any) {
     console.error("Auth Sync Error:", error);
     return NextResponse.json({ success: false, error: "Failed to sync user" }, { status: 500 });

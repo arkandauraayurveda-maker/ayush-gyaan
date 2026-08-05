@@ -5,7 +5,7 @@ import { verifyAdminAuth } from "@/lib/authMiddleware";
 
 export async function GET(req: NextRequest) {
   try {
-    const { errorResponse } = await verifyAdminAuth(req);
+    const { errorResponse } = await verifyAdminAuth(req, "GLOBAL_SETTINGS");
     if (errorResponse) return errorResponse;
 
     await connectToDatabase();
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { errorResponse } = await verifyAdminAuth(req);
+    const { errorResponse } = await verifyAdminAuth(req, "GLOBAL_SETTINGS");
     if (errorResponse) return errorResponse;
 
     const { aiModels, aiLimits, aiMultimodalLimits, aiPricing } = await req.json();

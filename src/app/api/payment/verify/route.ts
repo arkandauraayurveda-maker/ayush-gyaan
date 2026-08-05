@@ -7,7 +7,7 @@ import Coupon from "@/models/Coupon";
 
 export async function POST(req: NextRequest) {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, userId, courseId, aiPlan, appliedCouponCode } = await req.json();
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, userId, courseId, aiPlan, billingCycle, appliedCouponCode } = await req.json();
     
     // 1. 🛡️ VERIFY SIGNATURE (Security Core)
     const secret = process.env.RAZORPAY_KEY_SECRET;
@@ -64,21 +64,27 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    // 4. 🤖 CONFIGURE AI PLAN & TOKENS
+    // 4. 🤖 CONFIGURE AI PLAN & TOKENS ACCORDING TO BILLING CYCLE
     if (aiPlan && aiPlan !== "none") {
-      let tokensToAssign = 0;
+      let tokensToAssign = 10;
       if (aiPlan === "pro") tokensToAssign = 9999;
-      else if (aiPlan === "plus") tokensToAssign = 1000;
-      else if (aiPlan === "basic") tokensToAssign = 50;
+      else if (aiPlan === "plus") tokensToAssign = 100;
+      else if (aiPlan === "basic") tokensToAssign = 10;
 
-      const nextRefill = new Date();
-      nextRefill.setMonth(nextRefill.getMonth() + 1);
+      const cycle = billingCycle === "annual" || billingCycle === "yearly" ? "annual" : "monthly";
+      const validityEnd = new Date();
+
+      if (cycle === "annual") {
+        validityEnd.setFullYear(validityEnd.getFullYear() + 1); // 1 Full Year (365 days)
+      } else {
+        validityEnd.setMonth(validityEnd.getMonth() + 1); // 1 Month
+      }
 
       updateQuery.$set = {
-        "aiPlan.tier": aiPlan,
+        "aiPlan.tier": aiPlan.toLowerCase(),
         "aiPlan.tokens": tokensToAssign,
-        "aiPlan.validityEnd": nextRefill, 
-        "aiPlan.tokenRefillDate": nextRefill
+        "aiPlan.validityEnd": validityEnd,
+        "aiPlan.billingCycle": cycle
       };
     }
 

@@ -16,12 +16,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [isLoading, setIsLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // 🛡️ Route Protection & Auth Listener
+  // 🛡️ Route Protection, Auth & Onboarding Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
-        router.push("/login"); // Redirect unauthorized users
+        router.push("/login?redirect=/dashboard"); // Redirect unauthorized users
       } else {
+        try {
+          const token = await user.getIdToken(true);
+          const res = await fetch("/api/user/me", {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const data = await res.json();
+          if (data.success && data.user?.isOnboarded === false) {
+            router.push("/onboarding?redirect=/dashboard");
+            return;
+          }
+        } catch (e) {
+          console.error("Dashboard Onboarding Guard Error:", e);
+        }
         setIsLoading(false);
       }
     });

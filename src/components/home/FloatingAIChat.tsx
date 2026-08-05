@@ -161,10 +161,14 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
 
   const startNewChat = () => {
     const newId = `session_${Date.now()}`;
+    const currentUser = auth.currentUser;
+
     const initialMsg: Message = {
       id: Date.now().toString(),
       role: "model",
-      content: `प्रणाम ${userName}! 🙏 मैं आयुष-ज्ञान का उन्नत AI आयुर्वेदाचार्य हूँ। आप संहिताओं के श्लोक, उनके गूढ़ अर्थ, या किसी भी नैदानिक (clinical) विषय पर मेरा मार्गदर्शन प्राप्त कर सकते हैं।`,
+      content: currentUser 
+        ? `प्रणाम ${userName}! 🙏 मैं आयुष-ज्ञान का उन्नत AI आयुर्वेदाचार्य हूँ। आप संहिताओं के श्लोक, उनके गूढ़ अर्थ, या किसी भी नैदानिक विषय पर मेरा मार्गदर्शन प्राप्त कर सकते हैं।`
+        : `प्रणाम! 🙏 मैं आयुष-ज्ञान का उन्नत AI आयुर्वेदाचार्य हूँ। AI से संवाद करने और संहिताओं के ज्ञान प्राप्त करने के लिए कृपया पहले लॉगिन करें।\n\n[LOGIN_CARD]`,
       timestamp: Date.now()
     };
     setCurrentSessionId(newId);
@@ -234,6 +238,19 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
     e?.preventDefault();
     if ((!input.trim() && !selectedImage) || isLoading || cooldown > 0) return;
 
+    const user = auth.currentUser;
+    if (!user) {
+      const userText = input.trim();
+      setInput(""); setSelectedImage(null);
+      const promptMessages: Message[] = [
+        ...messages, 
+        { id: Date.now().toString(), role: "user", content: userText || "📸 [चित्र]", timestamp: Date.now() },
+        { id: (Date.now() + 1).toString(), role: "model", content: "नमस्ते! आयुष-ज्ञान AI आयुर्वेदाचार्य से परामर्श प्राप्त करने के लिए कृपया पहले लॉगिन करें।\n\n[LOGIN_CARD]", timestamp: Date.now() + 1 }
+      ];
+      setMessages(promptMessages);
+      return;
+    }
+
     const userText = input.trim();
     setInput(""); setSelectedImage(null);
     if (isListening) toggleVoiceRecognition();
@@ -243,18 +260,17 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
     setIsLoading(true); setCooldown(3); 
 
     try {
-      const user = auth.currentUser;
-      const idToken = user ? await user.getIdToken(true) : null;
+      const idToken = await user.getIdToken(true);
 
       const cleanContext = messages
-        .filter(m => !m.content.includes("⚠️") && !m.content.includes("अपग्रेड"))
+        .filter(m => !m.content.includes("⚠️") && !m.content.includes("अपग्रेड") && !m.content.includes("[LOGIN_CARD]"))
         .slice(-6);
 
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json", 
-          ...(idToken ? { "Authorization": `Bearer ${idToken}` } : {}) 
+          "Authorization": `Bearer ${idToken}`
         },
         body: JSON.stringify({ 
           message: userText, 
@@ -268,7 +284,7 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
       const data = await res.json();
 
       if (data.success) {
-        const msgTimestamp = Date.now();
+        const msgTimestamp = new Date().getTime();
         const updatedMessages: Message[] = [...newMessages, { id: msgTimestamp.toString(), role: "model", content: data.reply, timestamp: msgTimestamp }];
         setMessages(updatedMessages);
         saveToLocalHistory(updatedMessages); 
@@ -279,8 +295,9 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
       } else {
         triggerUpgradeCards(newMessages, data.error);
       }
-    } catch (_error) {
-      const errorTimestamp = Date.now();
+    } catch (error) {
+      console.error("Chat message sending error:", error);
+      const errorTimestamp = new Date().getTime();
       const errorMessage: Message = {
         id: errorTimestamp.toString(),
         role: "model",
@@ -366,6 +383,29 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
   };
 
   const formatMessage = (text: string) => {
+    if (text.includes("[LOGIN_CARD]")) {
+      const parts = text.split("[LOGIN_CARD]");
+      return (
+        <div className="space-y-4">
+          <span>{parts[0].replace(/\*\*/g, '')}</span>
+          <div className="bg-gradient-to-br from-emerald-950/60 to-black/80 border border-emerald-500/30 rounded-2xl p-4 shadow-xl">
+            <h4 className="text-emerald-400 font-bold text-sm mb-1 flex items-center gap-2">
+              <Lock className="w-4 h-4" /> Authentication Required
+            </h4>
+            <p className="text-xs text-gray-300 mb-4">
+              Sign in or create your AyushGyaan scholar account to start chatting with the AI & access personalized shloka insights.
+            </p>
+            <a 
+              href="/login?redirect=/" 
+              className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
+            >
+              Sign In / Register Now <ChevronRight className="w-4 h-4"/>
+            </a>
+          </div>
+        </div>
+      );
+    }
+
     if (text.includes("[PRICING_CARDS]")) {
       const parts = text.split("[PRICING_CARDS]");
       return (
@@ -417,6 +457,7 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
           <motion.button
             initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }}
             onClick={() => setIsOpen(true)}
+            aria-label="Open AyushGyaan AI Consultation"
             className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-[0_0_30px_rgba(16,185,129,0.4)] border border-emerald-300/30 hover:scale-105 transition-transform"
           >
             <Sparkles className="w-7 h-7" />

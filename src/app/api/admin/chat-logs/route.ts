@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifyAdminAuth } from "@/lib/authMiddleware";
 import connectToDatabase from "@/lib/mongodb";
 import AIChatLog from "@/models/AIChatLog";
 
 export async function GET(req: NextRequest) {
   try {
-    // 🔐 यहाँ आप भविष्य में Admin Verification/Auth लगा सकते हैं
-    
+    // 🔐 Verify Admin or Co-Admin with 'AI_CHAT_LOGS' tab permission
+    const authResult = await verifyAdminAuth(req, "AI_CHAT_LOGS");
+    if (authResult.errorResponse) return authResult.errorResponse;
+
     await connectToDatabase();
 
-    // डेटाबेस से ताज़ा 100 चैट्स निकालें (सबसे नई सबसे ऊपर)
     const logs = await AIChatLog.find({})
       .sort({ createdAt: -1 })
       .limit(100)

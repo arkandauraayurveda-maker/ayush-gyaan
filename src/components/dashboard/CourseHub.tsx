@@ -179,7 +179,7 @@ export default function CourseHub({ enrolledCourses }: CourseHubProps) {
                 
                 <div className="mt-6 pt-4 border-t border-emerald-900/30 flex justify-between items-center">
                   <span className="text-xs text-gray-400">NCISM Compliant</span>
-                  <Link href={`/samhita-reader?course=${course.courseId}`} className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-950/50 px-3 py-1.5 rounded-lg border border-emerald-500/30">
+                  <Link href={`/samhita?course=${course.courseId}`} className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-950/50 px-3 py-1.5 rounded-lg border border-emerald-500/30">
                     <PlayCircle className="w-4 h-4" /> Open Samhita Reader
                   </Link>
                 </div>

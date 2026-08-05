@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
-    const { errorResponse } = await verifyAdminAuth(req);
+    const { errorResponse } = await verifyAdminAuth(req, "STUDENTS");
     if (errorResponse) return errorResponse;
 
     await connectToDatabase();

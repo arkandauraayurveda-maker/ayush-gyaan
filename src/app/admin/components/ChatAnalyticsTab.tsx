@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { MessageSquare, Zap, Database, Search, User, Clock, Bot, CheckCircle2, Loader2 } from "lucide-react";
+import { auth } from "@/lib/firebase";
 
 export default function ChatAnalyticsTab() {
   const [chatLogs, setChatLogs] = useState<any[]>([]);
@@ -12,11 +13,15 @@ export default function ChatAnalyticsTab() {
   const fetchChatLogs = async () => {
     setIsLoading(true);
     try {
-      // (यह API हम इसके बाद बनाएंगे)
-      const res = await fetch("/api/admin/chat-logs");
+      const user = auth.currentUser;
+      if (!user) return;
+      const token = await user.getIdToken();
+      const res = await fetch("/api/admin/chat-logs", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       const data = await res.json();
       if (data.success) {
-        setChatLogs(data.logs);
+        setChatLogs(data.logs || []);
       }
     } catch (error) {
       console.error("Failed to fetch logs", error);

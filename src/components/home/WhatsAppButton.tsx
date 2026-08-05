@@ -18,6 +18,7 @@ export default function WhatsAppButton() {
       whileHover={{ scale: 1.08 }}
       whileTap={{ scale: 0.95 }}
       className="fixed bottom-6 left-6 z-40 flex items-center gap-2.5 bg-gradient-to-r from-emerald-600 to-green-500 text-white px-4 py-3 rounded-full shadow-[0_0_25px_rgba(16,185,129,0.4)] border border-emerald-300/30 group transition-all"
+      aria-label="Contact Student Support on WhatsApp (+91-9772852668)"
       title="24/7 Student Help (+91-9772852668)"
     >
       <div className="relative">

@@ -30,9 +30,14 @@ export default function LoginPage() {
   // 🧠 The Bridge: Firebase to MongoDB Sync
   const syncWithDatabaseAndRedirect = async (firebaseUser: any) => {
     try {
+      const idToken = await firebaseUser.getIdToken(true);
+
       const res = await fetch('/api/auth/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
         body: JSON.stringify({ 
           uid: firebaseUser.uid, 
           email: firebaseUser.email,

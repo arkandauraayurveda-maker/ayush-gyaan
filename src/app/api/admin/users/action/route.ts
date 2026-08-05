@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import mongoose from "mongoose";
 import connectToDatabase from "@/lib/mongodb";
 import User from "@/models/User";
 import { verifyAdminAuth } from "@/lib/authMiddleware";
 
 export async function POST(req: NextRequest) {
   try {
-    const { errorResponse } = await verifyAdminAuth(req);
+    const { errorResponse } = await verifyAdminAuth(req, "STUDENTS");
     if (errorResponse) return errorResponse;
 
     const body = await req.json();
-    // 🔥 Frontend se aane wale naye fields (role, tier, tokens, validityMonths) add kiye
     const { userId, action, courseId, planType, role, tier, tokens, validityMonths } = body; 
 
     if (!userId || !action) {
@@ -17,16 +17,23 @@ export async function POST(req: NextRequest) {
     }
 
     await connectToDatabase();
-    const user = await User.findOne({ uid: userId });
+
+    // 🔍 Find user by UID or MongoDB _ID
+    let user = await User.findOne({ uid: userId });
+    if (!user && mongoose.Types.ObjectId.isValid(userId)) {
+      user = await User.findById(userId);
+    }
 
     if (!user) {
       return NextResponse.json({ success: false, error: "User not found." }, { status: 404 });
     }
 
+    const normalizedAction = action.toString().toUpperCase();
+
     // ==========================================
-    // 🎓 ACTION 1: COURSE GRANT / REVOKE (100% UNTOUCHED)
+    // 🎓 ACTION 1: COURSE GRANT / REVOKE
     // ==========================================
-    if (action === "grant" || action === "revoke") {
+    if (normalizedAction === "GRANT" || normalizedAction === "REVOKE") {
       if (!courseId) {
         return NextResponse.json({ success: false, error: "Course ID is required for this action." }, { status: 400 });
       }
@@ -34,7 +41,7 @@ export async function POST(req: NextRequest) {
       if (!user.purchasedCourses) user.purchasedCourses = [];
       const existingCourse = user.purchasedCourses.find((c: any) => c.courseId === courseId);
 
-      if (action === "grant") {
+      if (normalizedAction === "GRANT") {
         if (existingCourse) {
           existingCourse.status = "ACTIVE";
           existingCourse.expiryDate = new Date(new Date().setFullYear(new Date().getFullYear() + 1));
@@ -49,7 +56,7 @@ export async function POST(req: NextRequest) {
           });
         }
       } 
-      else if (action === "revoke") {
+      else if (normalizedAction === "REVOKE") {
         if (existingCourse) {
           existingCourse.status = "REVOKED"; 
         } else {
@@ -61,30 +68,23 @@ export async function POST(req: NextRequest) {
     }
 
     // ==========================================
-    // 🚀 ACTION 2: UPGRADE AI PLAN & USER ROLE
+    // 🚀 ACTION 2: UPGRADE AI PLAN & USER ROLE / ACCESS
     // ==========================================
-    // ==========================================
-    // 🚀 ACTION 2: UPGRADE AI PLAN & USER ROLE
-    // ==========================================
-    else if (action === "UPGRADE_AI_PLAN" || action === "UPDATE_ACCESS") {
+    else if (normalizedAction === "UPGRADE_AI_PLAN" || normalizedAction === "UPDATE_ACCESS") {
       
-      // 🔥 1. Role Update (Auto-fix for legacy 'student' roles)
+      // 1. Role Update
       if (role) {
         user.role = role === "student" ? "user" : role;
       } else if (user.role === "student") {
-        user.role = "user"; // Purane DB users ko automatically 'user' me shift kar dega
+        user.role = "user";
       }
-
-      // ... (बाकी का कोड एकदम सेम रहेगा)
 
       // 2. Tier Update
       const finalTier = (tier || planType || user.aiPlan?.tier || "basic").toLowerCase();
 
       // 3. Tokens Update
-      let finalTokens = tokens !== undefined ? Number(tokens) : user.aiPlan?.tokens;
-      
-      // (अगर पुरानी API से कॉल हुआ है जहाँ tokens नहीं भेजे गए)
-      if (action === "UPGRADE_AI_PLAN" && tokens === undefined) {
+      let finalTokens = tokens !== undefined && tokens !== null ? Number(tokens) : user.aiPlan?.tokens;
+      if (finalTokens === undefined || isNaN(finalTokens)) {
         if (finalTier === "pro" || finalTier === "plus") finalTokens = 9999;
         else finalTokens = 10;
       }
@@ -114,13 +114,12 @@ export async function POST(req: NextRequest) {
     
     // ❌ INVALID ACTION
     else {
-      return NextResponse.json({ success: false, error: "Invalid Action" }, { status: 400 });
+      return NextResponse.json({ success: false, error: `Invalid Action '${action}'` }, { status: 400 });
     }
 
     // 💾 FINAL SAVE 
     await user.save();
     
-    // 🔥 Return updated user so frontend updates instantly
     return NextResponse.json({ 
       success: true, 
       message: `Action '${action}' successful!`,
@@ -129,7 +128,8 @@ export async function POST(req: NextRequest) {
         name: user.name,
         email: user.email,
         role: user.role,
-        aiPlan: user.aiPlan
+        aiPlan: user.aiPlan,
+        purchasedCourses: user.purchasedCourses
       }
     }, { status: 200 });
 
