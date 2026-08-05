@@ -7,6 +7,8 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { motion, AnimatePresence } from "framer-motion";
 import { LayoutDashboard, BookOpen, Settings, LogOut, Sparkles, Loader2, Menu, X } from "lucide-react";
 import Link from "next/link";
+import GalaxyBackground from "@/components/home/GalaxyBackground";
+import WhatsAppButton from "@/components/home/WhatsAppButton";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -47,7 +49,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="flex min-h-screen bg-[#020604] text-white overflow-hidden">
+    <div className="flex min-h-screen bg-[#020604] text-white overflow-hidden relative">
+      
+      {/* 🌌 3D STAR & GALAXY BACKGROUND */}
+      <GalaxyBackground />
       
       {/* 📱 Mobile Navbar (Visible only on small screens) */}
       <div className="md:hidden fixed top-0 w-full bg-[#050B08]/90 backdrop-blur-xl border-b border-emerald-900/30 z-50 p-4 flex justify-between items-center">
@@ -107,6 +112,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </div>
       </main>
+
+      {/* 🟢 FLOATING WHATSAPP SUPPORT (+91-9772852668) */}
+      <WhatsAppButton />
 
     </div>
   );

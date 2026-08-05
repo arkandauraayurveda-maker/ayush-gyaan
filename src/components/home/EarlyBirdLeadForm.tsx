@@ -3,7 +3,12 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 export default function EarlyBirdLeadForm() {
-  const [formData, setFormData] = useState({ name: "", email: "", mobile: "" });
+  const [formData, setFormData] = useState({ 
+    name: "", 
+    email: "", 
+    mobile: "", 
+    course: "BAMS 1st Professional" 
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleEarlyBirdSubmit = async (e: React.FormEvent) => {
@@ -18,7 +23,7 @@ export default function EarlyBirdLeadForm() {
       const data = await res.json();
       if (data.success) {
         alert("Registration successful! You have secured priority access and will receive an email shortly.");
-        setFormData({ name: "", email: "", mobile: "" });
+        setFormData({ name: "", email: "", mobile: "", course: "BAMS 1st Professional" });
       } else { 
         alert("Registration Error: " + data.error); 
       }
@@ -36,7 +41,7 @@ export default function EarlyBirdLeadForm() {
         <div className="flex-1 text-center md:text-left relative z-10 w-full">
           <h3 className="text-2xl md:text-4xl font-black mb-3 md:mb-4 tracking-tight">Advance Reservation for <br className="hidden md:block"/><span className="text-blue-400">All NCISM Subjects</span></h3>
           <p className="text-gray-400 mb-6 md:mb-8 leading-relaxed text-sm md:text-base">
-            Foundational & Clinical subjects across 1st, 2nd, and 3rd Prof are in high-quality production. Secure your spot at zero cost today and receive a guaranteed <strong className="text-white">50% Discount Coupon</strong> upon launch directly in your inbox.
+            Foundational & Clinical subjects across 1st, 2nd, and 3rd Professional Years (18 Months each as per NCISM) are in high-quality production. Secure your spot at zero cost today and receive a guaranteed <strong className="text-white">50% Discount Coupon</strong> upon launch directly in your inbox.
           </p>
         </div>
         
@@ -46,7 +51,22 @@ export default function EarlyBirdLeadForm() {
             <input type="email" placeholder="Email Address (For Discount Coupons)" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} required className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-sm text-white focus:border-blue-500 outline-none transition-colors" />
             <input type="tel" placeholder="Mobile Number" value={formData.mobile} onChange={(e) => setFormData({...formData, mobile: e.target.value})} required className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-sm text-white focus:border-blue-500 outline-none transition-colors" />
             
-            <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold py-3.5 md:py-4 rounded-xl transition-all mt-2 flex items-center justify-center gap-2 text-sm md:text-base">
+            {/* 🎓 BAMS NCISM PROF SELECTION */}
+            <div className="relative">
+              <select 
+                value={formData.course} 
+                onChange={(e) => setFormData({ ...formData, course: e.target.value })}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-sm text-white focus:border-blue-500 outline-none appearance-none transition-colors"
+              >
+                <option value="BAMS 1st Professional" className="bg-gray-900 text-white">BAMS 1st Professional (18 Months)</option>
+                <option value="BAMS 2nd Professional" className="bg-gray-900 text-white">BAMS 2nd Professional (18 Months)</option>
+                <option value="BAMS 3rd Professional" className="bg-gray-900 text-white">BAMS 3rd Professional (18 Months)</option>
+                <option value="Compulsory Rotatory Internship" className="bg-gray-900 text-white">Compulsory Rotatory Internship (CRMI)</option>
+              </select>
+              <ChevronDown className="w-4 h-4 text-gray-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+
+            <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold py-3.5 md:py-4 rounded-xl transition-all mt-2 flex items-center justify-center gap-2 text-sm md:text-base shadow-lg shadow-blue-600/20">
               {isSubmitting ? "Registering..." : "Secure Priority Access"}
             </button>
           </form>

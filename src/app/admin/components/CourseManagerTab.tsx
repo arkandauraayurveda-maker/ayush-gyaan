@@ -1,37 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, Plus, Pencil, Save, Eye, EyeOff, Trash2, Calendar, Ticket, Loader2, X, Bot, Sparkles, CheckSquare } from "lucide-react";
-
-// 🧠 1. MASTER SAMHITA DATABASE (No more manual typing!)
-const SAMHITA_DATA: Record<string, Record<string, number>> = {
-  "Charak Samhita": {
-    "Sutra Sthana": 30,
-    "Nidan Sthana": 8,
-    "Viman Sthana": 8,
-    "Sharir Sthana": 8,
-    "Indriya Sthana": 12,
-    "Chikitsa Sthana": 30,
-    "Kalpa Sthana": 12,
-    "Siddhi Sthana": 12
-  },
-  "Sushruta Samhita": {
-    "Sutra Sthana": 46,
-    "Nidan Sthana": 16,
-    "Sharir Sthana": 10,
-    "Chikitsa Sthana": 40,
-    "Kalpa Sthana": 8,
-    "Uttara Tantra": 66
-  },
-  "Ashtanga Hridaya": {
-    "Sutra Sthana": 30,
-    "Sharir Sthana": 6,
-    "Nidan Sthana": 16,
-    "Chikitsa Sthana": 22,
-    "Kalpa Sthana": 6,
-    "Uttara Sthana": 40
-  }
-};
+import { BookOpen, Plus, Pencil, Save, Trash2, Calendar, Loader2, X, Bot, Sparkles, CheckSquare, Tag, Flame } from "lucide-react";
 
 export default function CourseManagerTab() {
   const [coursesList, setCoursesList] = useState<any[]>([]);
@@ -39,9 +9,13 @@ export default function CourseManagerTab() {
   const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
   const [editingCourseId, setEditingCourseId] = useState<string | null>(null);
   
+  // 🧠 LIVE DYNAMIC SAMHITA DATA FROM DB
+  const [samhitaDataMap, setSamhitaDataMap] = useState<Record<string, Record<string, number[]>>>({});
+
   const [courseFormData, setCourseFormData] = useState({
-    courseId: "", title: "", prof: "", status: "Available Now", 
+    courseId: "", title: "", prof: "BAMS 1st Professional", status: "AVAILABLE_NOW", 
     price: "", originalPrice: "", discountText: "", badge: "",
+    marketingTag: "HOT", isPreRegister: false, launchDate: "",
     priceBasic: "", pricePlus: "", pricePro: "",
     startDate: "", couponCode: "", duration: "1-Year Access", syllabus: "", highlight: false, isActive: true,
     isSamhitaCourse: false,
@@ -59,7 +33,20 @@ export default function CourseManagerTab() {
 
   useEffect(() => {
     fetchCoursesList();
+    fetchLiveSamhitaStructure();
   }, []);
+
+  const fetchLiveSamhitaStructure = async () => {
+    try {
+      const res = await fetch("/api/shlokas/samhita-structure");
+      const data = await res.json();
+      if (data.success && data.structure) {
+        setSamhitaDataMap(data.structure);
+      }
+    } catch (error) {
+      console.error("Failed to fetch live samhita structure:", error);
+    }
+  };
 
   const fetchCoursesList = async () => {
     setIsLoading(true);
@@ -77,7 +64,9 @@ export default function CourseManagerTab() {
     const payload = {
       ...courseFormData,
       _id: editingCourseId,
-      syllabus: courseFormData.syllabus.split(",").map(s => s.trim()) 
+      syllabus: typeof courseFormData.syllabus === "string" 
+        ? courseFormData.syllabus.split(",").map(s => s.trim()) 
+        : courseFormData.syllabus
     };
 
     try {
@@ -93,7 +82,11 @@ export default function CourseManagerTab() {
   const handleCourseEdit = (course: any) => {
     setCourseFormData({
       ...course,
-      syllabus: course.syllabus ? course.syllabus.join(", ") : "",
+      prof: course.prof || "BAMS 1st Professional",
+      marketingTag: course.marketingTag || "HOT",
+      isPreRegister: course.isPreRegister || false,
+      launchDate: course.launchDate || "",
+      syllabus: Array.isArray(course.syllabus) ? course.syllabus.join(", ") : course.syllabus || "",
       isSamhitaCourse: course.isSamhitaCourse || false,
       allowedChapters: course.allowedChapters || [],
       priceBasic: course.priceBasic || "", pricePlus: course.pricePlus || "", pricePro: course.pricePro || "",
@@ -110,7 +103,7 @@ export default function CourseManagerTab() {
     }
   };
 
-  // 📖 2. SMART MAPPING LOGIC
+  // 📖 SMART MAPPING LOGIC
   const toggleChapterSelection = (ch: number) => {
     if (selectedChaptersArray.includes(ch)) {
       setSelectedChaptersArray(selectedChaptersArray.filter(c => c !== ch));
@@ -119,14 +112,13 @@ export default function CourseManagerTab() {
     }
   };
 
-  const selectAllChapters = (total: number) => {
-    setSelectedChaptersArray(Array.from({ length: total }, (_, i) => i + 1));
+  const selectAllChapters = (chaptersList: number[]) => {
+    setSelectedChaptersArray([...chaptersList]);
   };
 
   const addSmartSthanaMapping = () => {
     if (!selectedSamhita || !selectedSthana || selectedChaptersArray.length === 0) return;
     
-    // Convert array [1,2,3] to string "1, 2, 3"
     const chaptersStr = selectedChaptersArray.join(", ");
     const fullSthanaName = `${selectedSamhita} - ${selectedSthana}`;
 
@@ -135,7 +127,6 @@ export default function CourseManagerTab() {
       allowedChapters: [...prev.allowedChapters, { sthana: fullSthanaName, chapters: chaptersStr }] 
     }));
     
-    // Reset selections after adding
     setSelectedSthana("");
     setSelectedChaptersArray([]);
   };
@@ -156,17 +147,16 @@ export default function CourseManagerTab() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-      {/* HEADER & COURSE LIST REMAIN UNCHANGED (Kept for brevity, fully retained in real file) */}
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-amber-400">Manage Website Courses</h2>
-          <p className="text-sm text-gray-400">Create or edit the academic modules visible on the homepage.</p>
+          <h2 className="text-2xl font-bold text-amber-400">Manage Website & Pre-Registration Courses</h2>
+          <p className="text-sm text-gray-400">Create, edit, and configure academic modules, pricing tiers, and launch dates.</p>
         </div>
         <button 
           onClick={() => {
             setEditingCourseId(null);
             setCourseFormData({ 
-              courseId: "", title: "", prof: "", status: "Available Now", price: "", originalPrice: "", discountText: "", badge: "", startDate: "", couponCode: "", duration: "1-Year Access", syllabus: "", highlight: false, isActive: true, isSamhitaCourse: false, allowedChapters: [], 
+              courseId: "", title: "", prof: "BAMS 1st Professional", status: "AVAILABLE_NOW", price: "", originalPrice: "", discountText: "", badge: "", marketingTag: "HOT", isPreRegister: false, launchDate: "", startDate: "", couponCode: "", duration: "1-Year Access", syllabus: "", highlight: false, isActive: true, isSamhitaCourse: false, allowedChapters: [], 
               priceBasic: "", pricePlus: "", pricePro: "", 
               aiSettings: { isAiEnabled: false, allowedSamhitas: [], allowedChapters: [] } 
             });
@@ -186,12 +176,19 @@ export default function CourseManagerTab() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {coursesList.map((course) => (
             <div key={course._id} className={`glass-panel p-6 border relative flex flex-col ${course.isActive ? 'border-amber-500/20' : 'border-red-500/30 bg-red-950/10'}`}>
-              {course.badge && <span className="absolute -top-3 left-6 bg-red-500 text-white text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest">{course.badge}</span>}
+              
+              {course.marketingTag && (
+                <span className="absolute -top-3 left-6 bg-amber-500 text-black text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest flex items-center gap-1 shadow-md">
+                  <Flame className="w-3 h-3"/> {course.marketingTag}
+                </span>
+              )}
+
               {course.aiSettings?.isAiEnabled && (
                 <span className="absolute -top-3 right-6 bg-blue-600 text-white text-[10px] px-2 py-1 rounded flex items-center gap-1 font-bold">
                   <Bot className="w-3 h-3"/> AI ENABLED
                 </span>
               )}
+
               <div className="flex justify-between items-start mb-2 mt-2">
                 <h3 className="font-bold text-lg text-white">{course.title}</h3>
                 <div className="flex gap-2">
@@ -199,14 +196,21 @@ export default function CourseManagerTab() {
                   <button onClick={() => handleCourseDelete(course._id)} className="p-1.5 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-md transition-colors"><Trash2 className="w-4 h-4"/></button>
                 </div>
               </div>
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">{course.prof} | {course.courseId}</p>
               
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">{course.prof} | {course.courseId}</p>
+              
+              {course.isPreRegister && (
+                <div className="bg-blue-950/40 border border-blue-500/30 text-blue-400 text-xs px-3 py-1.5 rounded-lg mb-3 flex items-center gap-1 font-bold">
+                  <Calendar className="w-3.5 h-3.5"/> Launching: {course.launchDate || "Soon"}
+                </div>
+              )}
+
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-2xl font-black text-amber-400">{course.price}</span>
               </div>
               
               {(course.priceBasic || course.pricePlus || course.pricePro) && (
-                <div className="flex gap-2 mb-6 border-b border-gray-800 pb-4 text-[10px] font-bold">
+                <div className="flex gap-2 mb-4 border-b border-gray-800 pb-4 text-[10px] font-bold">
                   {course.priceBasic && <span className="bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded border border-emerald-500/20">Basic: {course.priceBasic}</span>}
                   {course.pricePlus && <span className="bg-blue-500/10 text-blue-400 px-2 py-1 rounded border border-blue-500/20">Plus: {course.pricePlus}</span>}
                   {course.pricePro && <span className="bg-purple-500/10 text-purple-400 px-2 py-1 rounded border border-purple-500/20">Pro: {course.pricePro}</span>}
@@ -237,14 +241,66 @@ export default function CourseManagerTab() {
                   <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Course Title</label>
                   <input required value={courseFormData.title} onChange={e => setCourseFormData({...courseFormData, title: e.target.value})} className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-amber-500" placeholder="e.g. Samhita Adhyayan I" />
                 </div>
+                
+                {/* 🎓 NCISM BAMS PROF SELECTION */}
                 <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Prof / Category</label>
-                  <input required value={courseFormData.prof} onChange={e => setCourseFormData({...courseFormData, prof: e.target.value})} className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-amber-500" placeholder="e.g. BAMS 1st Professional" />
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Academic Year (NCISM)</label>
+                  <select 
+                    value={courseFormData.prof} 
+                    onChange={e => setCourseFormData({...courseFormData, prof: e.target.value})}
+                    className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-amber-500"
+                  >
+                    <option value="BAMS 1st Professional">BAMS 1st Professional (18 Months)</option>
+                    <option value="BAMS 2nd Professional">BAMS 2nd Professional (18 Months)</option>
+                    <option value="BAMS 3rd Professional">BAMS 3rd Professional (18 Months)</option>
+                    <option value="Compulsory Rotatory Internship">Compulsory Rotatory Internship (CRMI)</option>
+                  </select>
                 </div>
+
+                {/* 🏷️ MARKETING BADGE & PRE-REGISTER */}
                 <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Action Status</label>
-                  <input required value={courseFormData.status} onChange={e => setCourseFormData({...courseFormData, status: e.target.value})} className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-amber-500" placeholder="e.g. Available Now" />
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Marketing Tag Icon</label>
+                  <select 
+                    value={courseFormData.marketingTag} 
+                    onChange={e => setCourseFormData({...courseFormData, marketingTag: e.target.value})}
+                    className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-amber-500"
+                  >
+                    <option value="HOT">🔥 HOT</option>
+                    <option value="EXCLUSIVE">👑 EXCLUSIVE</option>
+                    <option value="BESTSELLER">⭐ BESTSELLER</option>
+                    <option value="TRENDING">⚡ TRENDING</option>
+                    <option value="NEW">✨ NEW</option>
+                  </select>
                 </div>
+              </div>
+
+              {/* 🚀 PRE-REGISTRATION & LAUNCH DATE */}
+              <div className="bg-blue-950/20 border border-blue-500/30 rounded-2xl p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={courseFormData.isPreRegister} 
+                      onChange={e => setCourseFormData({...courseFormData, isPreRegister: e.target.checked, status: e.target.checked ? "PRE_REGISTER" : "AVAILABLE_NOW"})} 
+                      className="accent-blue-500 w-5 h-5" 
+                    />
+                    <span className="text-blue-400 font-bold text-sm">Mark as Pre-Registration / Upcoming Course?</span>
+                  </label>
+                </div>
+
+                {courseFormData.isPreRegister && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-blue-500/20">
+                    <div>
+                      <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Expected Launch Date</label>
+                      <input 
+                        type="date" 
+                        value={courseFormData.launchDate} 
+                        onChange={e => setCourseFormData({...courseFormData, launchDate: e.target.value})} 
+                        className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-blue-500" 
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* PRICING & AI TIERS SECTION */}
@@ -273,7 +329,7 @@ export default function CourseManagerTab() {
                 </div>
               </div>
 
-              {/* 📖 3. NEW SMART SAMHITA TOGGLE & MAPPING SECTION */}
+              {/* 📖 SMART SAMHITA TOGGLE & MAPPING SECTION (DYNAMIC DB SELECTION) */}
               <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-2xl p-5 space-y-4">
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input 
@@ -282,7 +338,7 @@ export default function CourseManagerTab() {
                     onChange={e => setCourseFormData({...courseFormData, isSamhitaCourse: e.target.checked})} 
                     className="accent-emerald-500 w-5 h-5" 
                   />
-                  <span className="text-emerald-400 font-bold text-sm">Enable Smart Samhita Reader (No Manual Typing)</span>
+                  <span className="text-emerald-400 font-bold text-sm">Enable Dynamic Samhita Reader from Database</span>
                 </label>
 
                 {courseFormData.isSamhitaCourse && (
@@ -294,11 +350,11 @@ export default function CourseManagerTab() {
                         onChange={e => { setSelectedSamhita(e.target.value); setSelectedSthana(""); setSelectedChaptersArray([]); }}
                         className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-emerald-500"
                       >
-                        <option value="">1. Select Samhita...</option>
-                        {Object.keys(SAMHITA_DATA).map(samhita => <option key={samhita} value={samhita}>{samhita}</option>)}
+                        <option value="">1. Select Samhita from DB...</option>
+                        {Object.keys(samhitaDataMap).map(samhita => <option key={samhita} value={samhita}>{samhita}</option>)}
                       </select>
 
-                      {/* Step 2: Select Sthana (Auto-populated) */}
+                      {/* Step 2: Select Sthana */}
                       <select 
                         value={selectedSthana} 
                         onChange={e => { setSelectedSthana(e.target.value); setSelectedChaptersArray([]); }}
@@ -306,21 +362,27 @@ export default function CourseManagerTab() {
                         className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-emerald-500 disabled:opacity-50"
                       >
                         <option value="">2. Select Sthana...</option>
-                        {selectedSamhita && Object.keys(SAMHITA_DATA[selectedSamhita]).map(sthana => (
+                        {selectedSamhita && samhitaDataMap[selectedSamhita] && Object.keys(samhitaDataMap[selectedSamhita]).map(sthana => (
                           <option key={sthana} value={sthana}>{sthana}</option>
                         ))}
                       </select>
                     </div>
 
                     {/* Step 3: Smart Chapter Checkboxes */}
-                    {selectedSthana && (
+                    {selectedSthana && samhitaDataMap[selectedSamhita]?.[selectedSthana] && (
                       <div className="bg-black/40 p-4 rounded-xl border border-emerald-900/50">
                         <div className="flex justify-between items-center mb-3">
-                          <label className="text-xs text-emerald-400 font-bold uppercase tracking-widest">3. Select Chapters to include</label>
-                          <button type="button" onClick={() => selectAllChapters(SAMHITA_DATA[selectedSamhita][selectedSthana])} className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded border border-emerald-500/30">Select All</button>
+                          <label className="text-xs text-emerald-400 font-bold uppercase tracking-widest">3. Select Available DB Chapters</label>
+                          <button 
+                            type="button" 
+                            onClick={() => selectAllChapters(samhitaDataMap[selectedSamhita][selectedSthana])} 
+                            className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded border border-emerald-500/30"
+                          >
+                            Select All
+                          </button>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          {Array.from({ length: SAMHITA_DATA[selectedSamhita][selectedSthana] }, (_, i) => i + 1).map(ch => (
+                          {samhitaDataMap[selectedSamhita][selectedSthana].map(ch => (
                             <button
                               key={ch}
                               type="button"
@@ -363,17 +425,15 @@ export default function CourseManagerTab() {
                   <div className="space-y-4 pt-3 border-t border-blue-500/20">
                     <p className="text-xs text-gray-400">Select which Samhitas the AI is allowed to reference for this course context:</p>
                     <div className="flex gap-2">
-                      {/* Smart Dropdown for AI Samhita */}
                       <select 
                         value={aiSelectedSamhita} onChange={e => setAiSelectedSamhita(e.target.value)}
                         className="flex-1 bg-black/50 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
                       >
                         <option value="">Select Samhita for AI...</option>
-                        {Object.keys(SAMHITA_DATA).map(samhita => <option key={samhita} value={samhita}>{samhita}</option>)}
+                        {Object.keys(samhitaDataMap).map(samhita => <option key={samhita} value={samhita}>{samhita}</option>)}
                       </select>
                       <button type="button" onClick={addAiSamhita} className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 py-2 rounded-xl text-xs">Allow Samhita</button>
                     </div>
-                    {/* Display allowed Samhitas */}
                     {courseFormData.aiSettings.allowedSamhitas.length > 0 && (
                       <div className="flex flex-wrap gap-2">
                         {courseFormData.aiSettings.allowedSamhitas.map((samhita, idx) => (
@@ -387,7 +447,6 @@ export default function CourseManagerTab() {
                 )}
               </div>
 
-              {/* SAVE BUTTON */}
               <div>
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Syllabus Details (Comma Separated)</label>
                 <textarea required value={courseFormData.syllabus} onChange={e => setCourseFormData({...courseFormData, syllabus: e.target.value})} className="w-full bg-black/50 border border-gray-700 rounded-xl p-4 text-sm text-white outline-none focus:border-amber-500 h-28 resize-none" placeholder="Charak Sutrasthana (Ch 1-12)..."></textarea>

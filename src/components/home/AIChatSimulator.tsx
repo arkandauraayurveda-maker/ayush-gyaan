@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, Sparkles, Database, ShieldCheck, Loader2 } from "lucide-react";
 
@@ -21,6 +21,18 @@ export default function AIChatSimulator() {
   const [aiText1, setAiText1] = useState("");
   const [userText2, setUserText2] = useState("");
   const [aiText2, setAiText2] = useState("");
+
+  const chatContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // 📜 AUTO-SCROLL TO BOTTOM AS TYPING PROGRESSES
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  }, [userText1, aiText1, userText2, aiText2, phase]);
 
   // 🌿 1st Question (Text Typing)
   const q1 = "आयुर्वेद के अवतरण को चरक के अनुसार समझाओ?";
@@ -99,8 +111,8 @@ export default function AIChatSimulator() {
         </div>
       </div>
 
-      {/* Chat Area */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-5 relative pr-2">
+      {/* Chat Area with Auto-Scroll Ref */}
+      <div ref={chatContainerRef} className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-5 relative pr-2">
         
         {/* === Q1 AREA (User Text) === */}
         {phase !== "idle" && (

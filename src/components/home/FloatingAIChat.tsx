@@ -2,9 +2,12 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Bot, User as UserIcon, Sparkles, Loader2, X, ImageIcon, History, Zap, ChevronRight, Lock, Crown, CheckCircle2, ShieldCheck } from "lucide-react";
+import { 
+  Send, Bot, User as UserIcon, Sparkles, Loader2, X, ImageIcon, 
+  History, Zap, ChevronRight, Lock, Crown, CheckCircle2, ShieldCheck, 
+  Mic, MicOff, Plus, Trash2 
+} from "lucide-react";
 import { auth } from "@/lib/firebase";
-import Link from "next/link";
 
 type Message = { id: string; role: "user" | "model"; content: string; timestamp: number };
 type ChatSession = { id: string; title: string; updatedAt: number; messages: Message[] };
@@ -13,27 +16,56 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
   const [isOpen, setIsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false); 
   
-  // 🔥 User Plan State (Fetched from DB)
+  // User Plan State
   const [userPlan, setUserPlan] = useState<{ tier: string; tokens: number } | null>(null);
   const [userName, setUserName] = useState("विद्वान");
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [chatHistoryList, setChatHistoryList] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string>("session_1");
   
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
+  // Voice-to-Text State
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // ==========================================
-  // 🛡️ 1. SECURE INIT & FETCH USER PLAN
+  // 🖐️ 1. OUTSIDE CLICK AUTO-CLOSE LISTENER
+  // ==========================================
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (
+        isOpen && 
+        chatContainerRef.current && 
+        !chatContainerRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("touchstart", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [isOpen]);
+
+  // ==========================================
+  // 🛡️ 2. SECURE INIT & FETCH USER PLAN
   // ==========================================
   useEffect(() => {
     const initChat = async () => {
-      // 1. Load Razorpay Script
       if (!document.getElementById("razorpay-script")) {
         const script = document.createElement("script");
         script.id = "razorpay-script";
@@ -42,7 +74,6 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
         document.body.appendChild(script);
       }
 
-      // 2. Fetch User Plan Securely
       if (userId !== "guest_user") {
         try {
           const user = auth.currentUser;
@@ -62,7 +93,6 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
         }
       }
       
-      // 3. Load 7-Day History from LocalStorage
       loadLocalHistory();
     };
     
@@ -70,7 +100,7 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
   }, [isOpen, userId]);
 
   // ==========================================
-  // 🧠 2. SMART 7-DAY HISTORY MANAGEMENT
+  // 🧠 3. SMART 7-DAY HISTORY MANAGEMENT
   // ==========================================
   const loadLocalHistory = () => {
     const saved = localStorage.getItem(`ayush_chat_${userId}`);
@@ -78,40 +108,82 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
     const now = Date.now();
 
     if (saved) {
-      let parsedSessions: ChatSession[] = JSON.parse(saved);
-      parsedSessions = parsedSessions.filter(session => (now - session.updatedAt) < SEVEN_DAYS);
-      
-      setChatHistoryList(parsedSessions);
-      
-      if (parsedSessions.length > 0) {
-        setMessages(parsedSessions[0].messages); 
-      } else {
+      try {
+        let parsedSessions: ChatSession[] = JSON.parse(saved);
+        parsedSessions = parsedSessions.filter(session => (now - session.updatedAt) < SEVEN_DAYS);
+        
+        setChatHistoryList(parsedSessions);
+        
+        if (parsedSessions.length > 0) {
+          setCurrentSessionId(parsedSessions[0].id);
+          setMessages(parsedSessions[0].messages); 
+        } else {
+          startNewChat();
+        }
+        localStorage.setItem(`ayush_chat_${userId}`, JSON.stringify(parsedSessions));
+      } catch (e) {
         startNewChat();
       }
-      localStorage.setItem(`ayush_chat_${userId}`, JSON.stringify(parsedSessions));
     } else {
       startNewChat();
     }
   };
 
   const saveToLocalHistory = (newMessages: Message[]) => {
-    const title = newMessages.find(m => m.role === "user")?.content.substring(0, 30) + "..." || "New Consultation";
-    const newSession: ChatSession = {
-      id: "session_1", 
-      title,
-      updatedAt: Date.now(),
-      messages: newMessages
-    };
-    setChatHistoryList([newSession]);
-    localStorage.setItem(`ayush_chat_${userId}`, JSON.stringify([newSession]));
+    const title = newMessages.find(m => m.role === "user")?.content.substring(0, 30) + "..." || "नवीन परामर्श";
+    const now = Date.now();
+
+    setChatHistoryList(prevSessions => {
+      const existingIndex = prevSessions.findIndex(s => s.id === currentSessionId);
+      let updated: ChatSession[];
+
+      if (existingIndex >= 0) {
+        updated = [...prevSessions];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          updatedAt: now,
+          messages: newMessages
+        };
+      } else {
+        const newSession: ChatSession = {
+          id: currentSessionId,
+          title,
+          updatedAt: now,
+          messages: newMessages
+        };
+        updated = [newSession, ...prevSessions];
+      }
+
+      localStorage.setItem(`ayush_chat_${userId}`, JSON.stringify(updated));
+      return updated;
+    });
   };
 
   const startNewChat = () => {
-    // 🔥 FIX: Added "as Message[]" for strict typing
-    setMessages([{ id: Date.now().toString(), role: "model", content: `प्रणाम ${userName}! 🙏 मैं आयुष-ज्ञान का उन्नत AI आयुर्वेदाचार्य हूँ। आप संहिताओं के श्लोक, उनके गूढ़ अर्थ, या किसी भी नैदानिक (clinical) विषय पर मेरा मार्गदर्शन प्राप्त कर सकते हैं।`, timestamp: Date.now() }] as Message[]);
+    const newId = `session_${Date.now()}`;
+    const initialMsg: Message = {
+      id: Date.now().toString(),
+      role: "model",
+      content: `प्रणाम ${userName}! 🙏 मैं आयुष-ज्ञान का उन्नत AI आयुर्वेदाचार्य हूँ। आप संहिताओं के श्लोक, उनके गूढ़ अर्थ, या किसी भी नैदानिक (clinical) विषय पर मेरा मार्गदर्शन प्राप्त कर सकते हैं।`,
+      timestamp: Date.now()
+    };
+    setCurrentSessionId(newId);
+    setMessages([initialMsg]);
   };
 
-  useEffect(() => { if (isOpen) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isLoading, isOpen]);
+  const deleteSession = (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = chatHistoryList.filter(s => s.id !== sessionId);
+    setChatHistoryList(updated);
+    localStorage.setItem(`ayush_chat_${userId}`, JSON.stringify(updated));
+    if (currentSessionId === sessionId) {
+      startNewChat();
+    }
+  };
+
+  useEffect(() => { 
+    if (isOpen) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); 
+  }, [messages, isLoading, isOpen]);
   
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -120,7 +192,43 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
   }, [cooldown]);
 
   // ==========================================
-  // 🚀 3. SECURE MESSAGE SENDING & CONTEXT
+  // 🎙️ 4. VOICE-TO-TEXT SPEECH RECOGNITION
+  // ==========================================
+  const toggleVoiceRecognition = () => {
+    if (typeof window === "undefined") return;
+    
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("आपके ब्राउज़र में वॉइस-टू-टेक्स्ट सपोर्ट उपलब्ध नहीं है।");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    } else {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = "hi-IN";
+
+      recognition.onstart = () => setIsListening(true);
+      recognition.onresult = (event: any) => {
+        const transcript = Array.from(event.results)
+          .map((result: any) => result[0].transcript)
+          .join("");
+        setInput(transcript);
+      };
+      recognition.onerror = () => setIsListening(false);
+      recognition.onend = () => setIsListening(false);
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    }
+  };
+
+  // ==========================================
+  // 🚀 5. SECURE MESSAGE SENDING & CONTEXT
   // ==========================================
   const handleSendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -128,6 +236,7 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
 
     const userText = input.trim();
     setInput(""); setSelectedImage(null);
+    if (isListening) toggleVoiceRecognition();
     
     const newMessages: Message[] = [...messages, { id: Date.now().toString(), role: "user", content: userText || "📸 [चित्र संलग्न किया गया]", timestamp: Date.now() }];
     setMessages(newMessages);
@@ -137,21 +246,30 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
       const user = auth.currentUser;
       const idToken = user ? await user.getIdToken(true) : null;
 
-      // 🔥 FIX: Clean Context (अमान्य मैसेजेस को हटाना)
       const cleanContext = messages
         .filter(m => !m.content.includes("⚠️") && !m.content.includes("अपग्रेड"))
         .slice(-6);
 
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(idToken ? { "Authorization": `Bearer ${idToken}` } : {}) },
-        body: JSON.stringify({ message: userText, courseId: courseId, image: selectedImage, history: cleanContext }),
+        headers: { 
+          "Content-Type": "application/json", 
+          ...(idToken ? { "Authorization": `Bearer ${idToken}` } : {}) 
+        },
+        body: JSON.stringify({ 
+          message: userText, 
+          courseId: courseId, 
+          image: selectedImage, 
+          history: cleanContext,
+          isVoice: isListening
+        }),
       });
 
       const data = await res.json();
 
       if (data.success) {
-        const updatedMessages: Message[] = [...newMessages, { id: Date.now().toString(), role: "model", content: data.reply, timestamp: Date.now() }];
+        const msgTimestamp = Date.now();
+        const updatedMessages: Message[] = [...newMessages, { id: msgTimestamp.toString(), role: "model", content: data.reply, timestamp: msgTimestamp }];
         setMessages(updatedMessages);
         saveToLocalHistory(updatedMessages); 
         
@@ -161,13 +279,19 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
       } else {
         triggerUpgradeCards(newMessages, data.error);
       }
-    } catch (error) {
-      // 🔥 FIX: Added "as Message[]" for strict typing
-      setMessages([...newMessages, { id: Date.now().toString(), role: "model", content: "⚠️ नेटवर्क कनेक्शन बाधित है। कृपया अपने इंटरनेट की जाँच करें और पुनः प्रयास करें।", timestamp: Date.now() }] as Message[]);
+    } catch (_error) {
+      const errorTimestamp = Date.now();
+      const errorMessage: Message = {
+        id: errorTimestamp.toString(),
+        role: "model",
+        content: "⚠️ नेटवर्क कनेक्शन बाधित है। कृपया अपने इंटरनेट की जाँच करें और पुनः प्रयास करें।",
+        timestamp: errorTimestamp
+      };
+      setMessages([...newMessages, errorMessage]);
     } finally { setIsLoading(false); }
   };
 
-  // 🔥 TRIGGER UPGRADE UI IN CHAT
+  // TRIGGER UPGRADE UI IN CHAT
   const triggerUpgradeCards = (currentMessages: Message[], errorType: string) => {
     const errorMsg = errorType?.includes("limit") || errorType?.includes("अपग्रेड")
       ? "नमस्ते! आपके दैनिक निःशुल्क प्रश्नों की सीमा समाप्त हो गई है। आयुष-ज्ञान के साथ अपने अध्ययन को निर्बाध रूप से जारी रखने और उन्नत AI सुविधाओं का लाभ उठाने के लिए, कृपया हमारे प्रीमियम प्लान्स की ओर अपग्रेड करें।\n\n[PRICING_CARDS]"
@@ -178,9 +302,7 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
     saveToLocalHistory(finalMessages);
   };
 
-  // ==========================================
-  // 💳 4. IN-CHAT PAYMENT HANDLER
-  // ==========================================
+  // IN-CHAT PAYMENT HANDLER
   const handlePayment = async (planId: string) => {
     if (userId === "guest_user") return alert("कृपया प्रीमियम सुविधाओं का लाभ उठाने के लिए सर्वप्रथम लॉगिन करें।");
 
@@ -223,12 +345,11 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
 
           if (verifyData.success) {
             setUserPlan({ tier: planId, tokens: planId === 'pro' ? 9999 : 1000 }); 
-            // 🔥 FIX: Added ": Message[]" to strictly type the array
             const successMsg: Message[] = [...messages, { id: Date.now().toString(), role: "model", content: `🎉 अभिनंदन! आपका अकाउंट सफलतापूर्वक ${planId.toUpperCase()} प्लान में अपग्रेड हो चुका है। अब आप असीमित AI मार्गदर्शन प्राप्त कर सकते हैं।`, timestamp: Date.now() }];
             setMessages(successMsg);
             saveToLocalHistory(successMsg);
           } else {
-            alert("भुगतान सत्यापन विफल रहा (Verification failed)!");
+            alert("भुगतान सत्यापन विफल रहा!");
           }
         },
         theme: { color: "#10B981" }
@@ -244,9 +365,6 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
     }
   };
 
-  // ==========================================
-  // 🎨 5. RENDER UI & PRICING CARDS
-  // ==========================================
   const formatMessage = (text: string) => {
     if (text.includes("[PRICING_CARDS]")) {
       const parts = text.split("[PRICING_CARDS]");
@@ -262,7 +380,7 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
               <h3 className="text-2xl font-bold text-white mb-4">₹199<span className="text-xs text-gray-500 font-normal">/mo</span></h3>
               <ul className="space-y-2 mb-4 text-xs text-gray-300">
                 <li className="flex items-center gap-1.5"><CheckCircle2 className="w-3 h-3 text-blue-400"/> Expanded Daily Limits</li>
-                <li className="flex items-center gap-1.5"><CheckCircle2 className="w-3 h-3 text-blue-400"/> Advanced Image Analysis</li>
+                <li className="flex items-center gap-1.5"><CheckCircle2 className="w-3 h-3 text-blue-400"/> Advanced Image & Voice Analysis</li>
               </ul>
               <button onClick={() => handlePayment('plus')} className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors">
                 Upgrade to Plus
@@ -277,7 +395,7 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
               <h3 className="text-2xl font-bold text-white mb-4">₹499<span className="text-xs text-gray-500 font-normal">/mo</span></h3>
               <ul className="space-y-2 mb-4 text-xs text-gray-300">
                 <li className="flex items-center gap-1.5"><CheckCircle2 className="w-3 h-3 text-amber-400"/> Unlimited AI Consultations</li>
-                <li className="flex items-center gap-1.5"><CheckCircle2 className="w-3 h-3 text-amber-400"/> Gemini 1.5 Pro Intelligence</li>
+                <li className="flex items-center gap-1.5"><CheckCircle2 className="w-3 h-3 text-amber-400"/> Gemini 1.5 Pro Multimodal</li>
               </ul>
               <button onClick={() => handlePayment('pro')} className="w-full py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-black text-xs font-bold rounded-lg shadow-md hover:scale-[1.02] transition-transform">
                 Upgrade to Pro
@@ -310,25 +428,38 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
         {isOpen && (
           <motion.div
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
-            className="fixed inset-0 z-50 flex flex-col bg-[#020604] md:bg-transparent md:inset-auto md:bottom-6 md:right-6 md:w-[420px] md:h-[750px] md:max-h-[85vh] shadow-2xl"
+            className="fixed inset-x-0 bottom-0 top-12 z-50 flex flex-col md:inset-auto md:bottom-6 md:right-6 md:w-[440px] md:h-[680px] md:max-h-[88vh] shadow-2xl"
           >
-            <div className="flex flex-col h-full w-full md:rounded-3xl border border-emerald-900/50 bg-[#050B08]/95 backdrop-blur-2xl overflow-hidden relative pb-safe">
+            <div 
+              ref={chatContainerRef}
+              className="flex flex-col h-full w-full rounded-t-3xl md:rounded-3xl border border-emerald-900/50 bg-[#050B08]/95 backdrop-blur-2xl overflow-hidden relative pb-safe"
+            >
               
-              {/* HEADER WITH DYNAMIC PLAN BADGE */}
+              {/* HEADER WITH DYNAMIC PLAN BADGE & NEW CHAT */}
               <div className="flex items-center justify-between p-4 border-b border-emerald-900/30 bg-black/60 z-20">
-                <div className="flex items-center gap-3">
-                  <button onClick={() => setIsHistoryOpen(!isHistoryOpen)} className="p-2 bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-emerald-400 rounded-lg transition-colors relative">
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => setIsHistoryOpen(!isHistoryOpen)} 
+                    className="p-2 bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-emerald-400 rounded-lg transition-colors relative"
+                    title="7-Day History"
+                  >
                     <History className="w-5 h-5" />
                     {chatHistoryList.length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>}
                   </button>
+                  <button 
+                    onClick={startNewChat}
+                    className="p-2 bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-emerald-400 rounded-lg transition-colors"
+                    title="Start New Chat"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
                   <div>
                     <h3 className="text-sm font-bold text-white flex items-center gap-2">AyushGyaan AI</h3>
-                    <p className="text-[10px] text-emerald-500/70">{userPlan?.tokens !== undefined ? `${userPlan.tokens} Tokens Remaining` : "Syncing Data..."}</p>
+                    <p className="text-[10px] text-emerald-500/70">{userPlan?.tokens !== undefined ? `${userPlan.tokens} Tokens` : "Syncing..."}</p>
                   </div>
                 </div>
                 
                 <div className="flex items-center gap-2">
-                  {/* 🔥 DYNAMIC BADGE / UPGRADE BUTTON */}
                   {userPlan?.tier === 'pro' ? (
                      <div className="flex items-center gap-1 bg-amber-950/40 border border-amber-500/30 text-amber-400 text-[10px] font-bold px-2.5 py-1.5 rounded-lg">
                        <Crown className="w-3 h-3"/> PRO 
@@ -351,25 +482,35 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
                     initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ type: "tween", duration: 0.3 }}
                     className="absolute inset-y-0 left-0 w-[80%] md:w-3/4 bg-[#0A1410] border-r border-emerald-900/50 z-30 shadow-2xl flex flex-col"
                   >
-                    <div className="p-4 border-b border-emerald-900/30 bg-black/20 mt-[73px] flex justify-between items-center">
-                      <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><History className="w-4 h-4"/> 7-Day History</h4>
-                      <button onClick={() => setIsHistoryOpen(false)} className="md:hidden text-gray-500"><X className="w-4 h-4"/></button>
+                    <div className="p-4 border-b border-emerald-900/30 bg-black/20 mt-[65px] flex justify-between items-center">
+                      <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><History className="w-4 h-4"/> 7-Day Consultations</h4>
+                      <button onClick={() => setIsHistoryOpen(false)} className="text-gray-500 hover:text-white"><X className="w-4 h-4"/></button>
                     </div>
                     <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
                       {chatHistoryList.length === 0 ? (
-                        <p className="text-xs text-gray-500 text-center mt-10">No recent conversations.</p>
+                        <p className="text-xs text-gray-500 text-center mt-10">No recent consultations.</p>
                       ) : (
                         chatHistoryList.map(chat => (
-                          <button key={chat.id} onClick={() => { setMessages(chat.messages); setIsHistoryOpen(false); }} className="w-full text-left p-3 rounded-xl hover:bg-emerald-900/20 text-sm text-gray-300 transition-colors flex items-center justify-between group">
+                          <div 
+                            key={chat.id} 
+                            onClick={() => { setCurrentSessionId(chat.id); setMessages(chat.messages); setIsHistoryOpen(false); }}
+                            className={`w-full p-3 rounded-xl hover:bg-emerald-900/30 text-sm cursor-pointer transition-colors flex items-center justify-between group ${chat.id === currentSessionId ? "bg-emerald-900/40 text-emerald-300 border border-emerald-500/30" : "text-gray-300"}`}
+                          >
                             <span className="truncate pr-2">{chat.title}</span>
-                            <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-emerald-400 shrink-0"/>
-                          </button>
+                            <button 
+                              onClick={(e) => deleteSession(chat.id, e)}
+                              className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-400 transition-opacity"
+                              title="Delete Consultation"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         ))
                       )}
                       
                       <div className="m-2 mt-6 p-4 rounded-xl bg-gradient-to-br from-blue-900/10 to-purple-900/10 border border-blue-500/20 text-center">
                         <ShieldCheck className="w-6 h-6 text-emerald-400 mx-auto mb-2 opacity-50"/>
-                        <p className="text-[10px] text-gray-500">Chats auto-delete after 7 days for enhanced privacy.</p>
+                        <p className="text-[10px] text-gray-500">History auto-purges after 7 days to preserve student privacy.</p>
                       </div>
                     </div>
                   </motion.div>
@@ -397,29 +538,67 @@ export default function FloatingAIChat({ userId = "guest_user", courseId }: { us
                 <div ref={messagesEndRef} />
               </div>
 
+              {/* IMAGE PREVIEW BADGE */}
+              {selectedImage && (
+                <div className="px-4 py-2 bg-black/80 border-t border-emerald-900/30 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs text-emerald-400">
+                    <ImageIcon className="w-4 h-4" />
+                    <span>चित्र संलग्न (Image attached)</span>
+                  </div>
+                  <button onClick={() => setSelectedImage(null)} className="text-gray-400 hover:text-red-400 text-xs">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
               {/* INPUT AREA */}
               <div className="p-3 bg-black/80 border-t border-emerald-900/30 z-20 backdrop-blur-md">
                 <form onSubmit={handleSendMessage} className="relative flex flex-col bg-[#0A1410] border border-emerald-900/50 rounded-2xl focus-within:border-emerald-500/50 transition-colors">
                   <textarea
                     value={input} onChange={(e) => setInput(e.target.value)}
-                    placeholder={cooldown > 0 ? "कृपया प्रतीक्षा करें..." : "श्लोक पूछें, रोग निदान पर चर्चा करें या चित्र अपलोड करें..."}
+                    placeholder={cooldown > 0 ? "कृपया प्रतीक्षा करें..." : "श्लोक पूछें, रोग निदान पर चर्चा करें या चित्र/वॉइस भेजें..."}
                     disabled={cooldown > 0 || isLoading}
                     className="w-full bg-transparent text-white placeholder-gray-600 p-4 pb-2 outline-none resize-none text-sm custom-scrollbar"
                     rows={1} style={{ minHeight: '52px' }}
                   />
                   <div className="flex items-center justify-between px-3 pb-3 pt-1">
                     <div className="flex items-center gap-1">
-                      <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 text-gray-500 hover:text-emerald-400 rounded-xl transition-all">
+                      <button 
+                        type="button" 
+                        onClick={() => fileInputRef.current?.click()} 
+                        className="p-2 text-gray-500 hover:text-emerald-400 rounded-xl transition-all"
+                        title="Attach Image"
+                      >
                         <ImageIcon className="w-5 h-5" />
                         <input type="file" ref={fileInputRef} onChange={(e) => { const file = e.target.files?.[0]; if(file) { const reader = new FileReader(); reader.onloadend = () => setSelectedImage(reader.result as string); reader.readAsDataURL(file); }}} className="hidden" accept="image/*" />
                       </button>
+
+                      {/* VOICE INPUT BUTTON */}
+                      <button
+                        type="button"
+                        onClick={toggleVoiceRecognition}
+                        className={`p-2 rounded-xl transition-all ${
+                          isListening 
+                            ? "bg-red-500/20 text-red-400 animate-pulse border border-red-500/40" 
+                            : "text-gray-500 hover:text-emerald-400"
+                        }`}
+                        title={isListening ? "Stop Voice Input" : "Voice to Text Input"}
+                      >
+                        {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                      </button>
                     </div>
-                    <button type="submit" disabled={(!input.trim() && !selectedImage) || isLoading || cooldown > 0} className="w-10 h-10 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded-xl flex items-center justify-center transition-all">
+
+                    <button 
+                      type="submit" 
+                      disabled={(!input.trim() && !selectedImage) || isLoading || cooldown > 0} 
+                      className="w-10 h-10 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded-xl flex items-center justify-center transition-all shadow-md"
+                    >
                       {cooldown > 0 ? <span className="text-xs font-bold">{cooldown}s</span> : <Send className="w-4 h-4" />}
                     </button>
                   </div>
                 </form>
               </div>
+
             </div>
           </motion.div>
         )}

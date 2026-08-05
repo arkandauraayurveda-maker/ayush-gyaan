@@ -5,7 +5,7 @@ import { sendEmail } from "@/lib/mail";
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, mobile } = await req.json();
+    const { name, email, mobile, course } = await req.json();
 
     if (!name || !email || !mobile) {
       return NextResponse.json({ success: false, error: "All fields are required" }, { status: 400 });
@@ -20,7 +20,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Save New Lead
-    const newLead = await Lead.create({ name, email, mobile });
+    const newLead = await Lead.create({ 
+      name, 
+      email, 
+      mobile, 
+      course: course || "BAMS 1st Prof." 
+    });
 
     // 📧 SEND MARKETING/THANK YOU EMAIL
     const emailHtml = `

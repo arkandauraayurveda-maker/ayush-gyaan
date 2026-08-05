@@ -1,18 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/mongodb";
 import SystemSettings from "@/models/SystemSettings";
+import { verifyAdminAuth } from "@/lib/authMiddleware";
 
 export async function GET(req: NextRequest) {
   try {
+    const { errorResponse } = await verifyAdminAuth(req);
+    if (errorResponse) return errorResponse;
+
     await connectToDatabase();
     let settings = await SystemSettings.findOne({ settingId: "global_settings" });
     
-    // अगर पहली बार ऐप चल रहा है और सेटिंग्स नहीं हैं, तो डिफ़ॉल्ट बना दो (तीनों चीज़ों के साथ)
+    // अगर पहली बार ऐप चल रहा है और सेटिंग्स नहीं हैं, तो डिफ़ॉल्ट बना दो
     if (!settings) {
       settings = await SystemSettings.create({ 
         settingId: "global_settings",
-        aiModels: { basic: "gemini-3.1-flash-lite", plus: "gemini-3.5-flash-lite", pro: "gemini-3.6-flash" },
+        aiModels: { basic: "gemini-1.5-flash-8b", plus: "gemini-1.5-flash", pro: "gemini-1.5-pro" },
         aiLimits: { basic: 10, plus: 100, pro: 9999 },
+        aiMultimodalLimits: { basic: 3, plus: 25, pro: 9999 },
         aiPricing: { basic: 0, plus: 199, pro: 499 }
       });
     }
@@ -25,8 +30,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    // 🔥 अब हम frontend से तीनों ऑब्जेक्ट रिसीव करेंगे
-    const { aiModels, aiLimits, aiPricing } = await req.json();
+    const { errorResponse } = await verifyAdminAuth(req);
+    if (errorResponse) return errorResponse;
+
+    const { aiModels, aiLimits, aiMultimodalLimits, aiPricing } = await req.json();
     await connectToDatabase();
 
     const updatedSettings = await SystemSettings.findOneAndUpdate(
@@ -35,6 +42,7 @@ export async function POST(req: NextRequest) {
         $set: { 
           aiModels, 
           aiLimits, 
+          aiMultimodalLimits,
           aiPricing 
         } 
       },

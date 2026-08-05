@@ -4,6 +4,7 @@ const LeadSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   mobile: { type: String, required: true },
+  course: { type: String, default: "BAMS 1st Prof." },
   status: { type: String, default: "PRE_REGISTERED" }, // Status for CRM
   couponSent: { type: Boolean, default: false }, // Future tracking ke liye
   createdAt: { type: Date, default: Date.now }

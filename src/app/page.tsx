@@ -5,14 +5,17 @@ import FeaturesBento from "@/components/home/FeaturesBento";
 import CurriculumPricing from "@/components/home/CurriculumPricing";
 import EarlyBirdLeadForm from "@/components/home/EarlyBirdLeadForm";
 import FAQFooter from "@/components/home/FAQFooter";
-
-// 🔥 नया AI Chatbot Component
+import GalaxyBackground from "@/components/home/GalaxyBackground";
+import WhatsAppButton from "@/components/home/WhatsAppButton";
 import FloatingAIChat from "@/components/home/FloatingAIChat";
 
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-[#020604] text-white font-sans selection:bg-emerald-500/30 overflow-x-hidden relative">
       
+      {/* 🌌 3D STAR & GALAXY BACKGROUND */}
+      <GalaxyBackground />
+
       {/* ================= AMBIENT BACKGROUND ================= */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute top-[-5%] left-[-10%] w-[70vw] h-[70vw] md:w-[40vw] md:h-[40vw] bg-teal-600/10 rounded-full blur-[120px] md:blur-[150px] mix-blend-screen" />
@@ -27,6 +30,9 @@ export default function HomePage() {
       <CurriculumPricing />
       <EarlyBirdLeadForm />
       <FAQFooter />
+
+      {/* 🟢 FLOATING WHATSAPP SUPPORT (+91-9772852668) */}
+      <WhatsAppButton />
 
       {/* 🚀 FLOATING AI CHATBOT UI */}
       <FloatingAIChat />

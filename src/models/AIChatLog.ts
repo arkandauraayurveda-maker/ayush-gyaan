@@ -17,7 +17,7 @@ const AIChatLogSchema = new Schema<IAIChatLog>({
   userMessage: { type: String, required: true },
   aiResponse: { type: String, required: true },
   isExactMatch: { type: Boolean, default: false },
-  modelUsed: { type: String, enum: ['none', 'gemini-3.5-flash-lite', 'gemini-3.5-flas'], default: 'none' },
+  modelUsed: { type: String, enum: ['none', 'gemini-1.5-flash-8b', 'gemini-1.5-flash', 'gemini-1.5-pro'], default: 'none' },
   feedback: { type: String, enum: ['like', 'dislike'] },
   createdAt: { type: Date, default: Date.now, expires: '30d' } // 🔥 30 Days Auto-Delete Magic
 });

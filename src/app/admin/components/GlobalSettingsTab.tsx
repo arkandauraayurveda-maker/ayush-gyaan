@@ -1,18 +1,25 @@
 "use client";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Settings, Save, Server, Loader2, Sparkles, AlertTriangle, Database, IndianRupee } from "lucide-react";
+import { Settings, Save, Server, Loader2, Sparkles, AlertTriangle, Database, IndianRupee, Image as ImageIcon, Mic } from "lucide-react";
+import { auth } from "@/lib/firebase";
 
 export default function GlobalSettingsTab() {
   const [models, setModels] = useState({
-    basic: "gemini-3.5-flash-lite",
-    plus: "gemini-3.5-flash",
-    pro: "gemini-3.6-flash"
+    basic: "gemini-1.5-flash-8b",
+    plus: "gemini-1.5-flash",
+    pro: "gemini-1.5-pro"
   });
   
   const [limits, setLimits] = useState({
     basic: 10,
     plus: 100,
+    pro: 9999
+  });
+
+  const [multimodalLimits, setMultimodalLimits] = useState({
+    basic: 3,
+    plus: 25,
     pro: 9999
   });
 
@@ -29,11 +36,22 @@ export default function GlobalSettingsTab() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await fetch("/api/admin/settings");
+        const idToken = await auth.currentUser?.getIdToken();
+        const res = await fetch("/api/admin/settings", {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {}
+        });
         const data = await res.json();
         if (data.success && data.settings) {
           if (data.settings.aiModels) setModels(data.settings.aiModels);
-          if (data.settings.aiLimits) setLimits(data.settings.aiLimits);
+          if (data.settings.aiLimits) {
+            const l = data.settings.aiLimits;
+            setLimits({
+              basic: typeof l.basic === "object" ? l.basic.text : (l.basic ?? 10),
+              plus: typeof l.plus === "object" ? l.plus.text : (l.plus ?? 100),
+              pro: typeof l.pro === "object" ? l.pro.text : (l.pro ?? 9999),
+            });
+          }
+          if (data.settings.aiMultimodalLimits) setMultimodalLimits(data.settings.aiMultimodalLimits);
           if (data.settings.aiPricing) setPricing(data.settings.aiPricing);
         }
       } catch (error) {
@@ -50,17 +68,25 @@ export default function GlobalSettingsTab() {
     e.preventDefault();
     setIsSaving(true);
     try {
+      const idToken = await auth.currentUser?.getIdToken();
       const res = await fetch("/api/admin/settings", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // 🔥 Send all three objects
-        body: JSON.stringify({ aiModels: models, aiLimits: limits, aiPricing: pricing })
+        headers: {
+          "Content-Type": "application/json",
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {})
+        },
+        body: JSON.stringify({
+          aiModels: models,
+          aiLimits: limits,
+          aiMultimodalLimits: multimodalLimits,
+          aiPricing: pricing
+        })
       });
       const data = await res.json();
       if (data.success) {
         alert("✅ All System Settings Updated Successfully!");
       } else {
-        alert("⚠️ Failed to update settings.");
+        alert("⚠️ Failed to update settings: " + (data.error || "Unknown error"));
       }
     } catch (error) {
       alert("⚠️ Network Error.");
@@ -78,7 +104,7 @@ export default function GlobalSettingsTab() {
         <h2 className="text-2xl font-bold text-purple-400 flex items-center gap-2">
           <Settings className="w-6 h-6" /> Global System Settings
         </h2>
-        <p className="text-sm text-gray-400 mt-1">Manage AI models, daily token limits, and subscription pricing dynamically.</p>
+        <p className="text-sm text-gray-400 mt-1">Manage AI models, daily text/multimodal limits, and subscription pricing dynamically.</p>
       </div>
 
       <form onSubmit={handleSave} className="space-y-8">
@@ -92,7 +118,7 @@ export default function GlobalSettingsTab() {
           
           <div className="bg-blue-950/20 border-l-4 border-blue-500 p-4 rounded-r-xl mb-8 flex gap-3 text-sm text-blue-200">
             <AlertTriangle className="w-5 h-5 shrink-0 text-blue-400" />
-            <p><strong>Note:</strong> Ensure the model names perfectly match the official Google Gemini aliases (e.g., <code className="bg-black/50 px-1 py-0.5 rounded text-blue-300">gemini-1.5-flash</code>).</p>
+            <p><strong>Note:</strong> Ensure the model names perfectly match valid Gemini model identifiers (e.g., <code className="bg-black/50 px-1 py-0.5 rounded text-blue-300">gemini-1.5-flash</code>).</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -111,30 +137,56 @@ export default function GlobalSettingsTab() {
           </div>
         </div>
 
-        {/* ================= SECTION 2: TOKEN LIMITS ================= */}
+        {/* ================= SECTION 2: DAILY TEXT TOKEN LIMITS ================= */}
         <div className="glass-panel border border-blue-500/20 bg-black/40 p-6 md:p-8 rounded-3xl shadow-xl max-w-4xl">
           <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-800">
             <Database className="w-5 h-5 text-blue-400" />
-            <h3 className="text-lg font-bold text-gray-200">Daily Token Limits (Queries/Day)</h3>
+            <h3 className="text-lg font-bold text-gray-200">Daily Text Query Limits</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-gray-900/50 p-5 rounded-2xl border border-gray-800 focus-within:border-gray-500 transition-colors">
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 block">Basic (Free)</label>
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 block">Basic Text Limit</label>
               <input type="number" min="0" required value={limits.basic} onChange={(e) => setLimits({...limits, basic: Number(e.target.value)})} className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-blue-500" />
             </div>
             <div className="bg-emerald-950/20 p-5 rounded-2xl border border-emerald-900/50 focus-within:border-emerald-500 transition-colors">
-              <label className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2 block">Plus Limit</label>
+              <label className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2 block">Plus Text Limit</label>
               <input type="number" min="0" required value={limits.plus} onChange={(e) => setLimits({...limits, plus: Number(e.target.value)})} className="w-full bg-black/50 border border-emerald-900 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-emerald-500" />
             </div>
             <div className="bg-purple-950/20 p-5 rounded-2xl border border-purple-900/50 focus-within:border-purple-500 transition-colors">
-              <label className="text-xs font-bold text-purple-400 uppercase tracking-widest mb-2 block">Pro Limit</label>
+              <label className="text-xs font-bold text-purple-400 uppercase tracking-widest mb-2 block">Pro Text Limit</label>
               <input type="number" min="0" required value={limits.pro} onChange={(e) => setLimits({...limits, pro: Number(e.target.value)})} className="w-full bg-black/50 border border-purple-900 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-purple-500" />
               <p className="text-[10px] text-purple-500 mt-2">Enter 9999 for unlimited.</p>
             </div>
           </div>
         </div>
 
-        {/* ================= SECTION 3: PRICING ================= */}
+        {/* ================= SECTION 3: DAILY MULTIMODAL LIMITS ================= */}
+        <div className="glass-panel border border-cyan-500/20 bg-black/40 p-6 md:p-8 rounded-3xl shadow-xl max-w-4xl">
+          <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-800">
+            <div className="flex items-center gap-1 text-cyan-400">
+              <ImageIcon className="w-5 h-5" />
+              <Mic className="w-4 h-4" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-200">Daily Multimodal (Image & Voice) Query Limits</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-gray-900/50 p-5 rounded-2xl border border-gray-800 focus-within:border-gray-500 transition-colors">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 block">Basic Image/Voice Limit</label>
+              <input type="number" min="0" required value={multimodalLimits.basic} onChange={(e) => setMultimodalLimits({...multimodalLimits, basic: Number(e.target.value)})} className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-cyan-500" />
+            </div>
+            <div className="bg-emerald-950/20 p-5 rounded-2xl border border-emerald-900/50 focus-within:border-emerald-500 transition-colors">
+              <label className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2 block">Plus Image/Voice Limit</label>
+              <input type="number" min="0" required value={multimodalLimits.plus} onChange={(e) => setMultimodalLimits({...multimodalLimits, plus: Number(e.target.value)})} className="w-full bg-black/50 border border-emerald-900 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-emerald-500" />
+            </div>
+            <div className="bg-purple-950/20 p-5 rounded-2xl border border-purple-900/50 focus-within:border-purple-500 transition-colors">
+              <label className="text-xs font-bold text-purple-400 uppercase tracking-widest mb-2 block">Pro Image/Voice Limit</label>
+              <input type="number" min="0" required value={multimodalLimits.pro} onChange={(e) => setMultimodalLimits({...multimodalLimits, pro: Number(e.target.value)})} className="w-full bg-black/50 border border-purple-900 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-purple-500" />
+              <p className="text-[10px] text-purple-500 mt-2">Enter 9999 for unlimited.</p>
+            </div>
+          </div>
+        </div>
+
+        {/* ================= SECTION 4: PRICING ================= */}
         <div className="glass-panel border border-emerald-500/20 bg-black/40 p-6 md:p-8 rounded-3xl shadow-xl max-w-4xl">
           <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-800">
             <IndianRupee className="w-5 h-5 text-emerald-400" />

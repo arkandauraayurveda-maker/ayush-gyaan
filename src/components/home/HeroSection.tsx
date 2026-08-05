@@ -22,7 +22,7 @@ export default function HeroSection() {
           </motion.h1>
 
           <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="text-gray-400 text-base md:text-xl max-w-2xl mx-auto lg:mx-0 mb-10 md:mb-12 leading-relaxed">
-            India's first AI-powered academic ecosystem for Ayurvedic scholars. Decode Samhitas, track clinical proficiency, and study seamlessly without distractions.
+            India&apos;s first AI-powered academic ecosystem for Ayurvedic scholars. Decode Samhitas, track clinical proficiency, and study seamlessly without distractions.
           </motion.p>
 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 md:gap-5 w-full sm:w-auto">

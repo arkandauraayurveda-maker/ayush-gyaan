@@ -1,21 +1,24 @@
 "use client";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Ticket, Plus, Pencil, Save, Trash2, Loader2, X } from "lucide-react";
+import { Ticket, Plus, Pencil, Save, Trash2, Loader2, X, ShieldCheck } from "lucide-react";
 
 export default function CouponManagerTab() {
   const [couponsList, setCouponsList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
   const [editingCouponId, setEditingCouponId] = useState<string | null>(null);
+  
   const [couponFormData, setCouponFormData] = useState({
     code: "",
-    discountPercentage: 10,
+    discountType: "PERCENTAGE",
+    discountValue: 15,
+    minOrderAmount: 0,
     isActive: true,
     expiryDate: "",
     courseId: "", 
     userId: "",   
-    maxUses: 100
+    maxUses: 50
   });
 
   useEffect(() => {
@@ -57,12 +60,14 @@ export default function CouponManagerTab() {
   const handleCouponEdit = (coupon: any) => {
     setCouponFormData({
       code: coupon.code,
-      discountPercentage: coupon.discountPercentage,
+      discountType: coupon.discountType || "PERCENTAGE",
+      discountValue: coupon.discountValue || coupon.discountPercentage || 15,
+      minOrderAmount: coupon.minOrderAmount || 0,
       isActive: coupon.isActive,
       expiryDate: coupon.expiryDate ? coupon.expiryDate.split("T")[0] : "",
       courseId: coupon.courseId || "",
       userId: coupon.userId || "",
-      maxUses: coupon.maxUses || 100
+      maxUses: coupon.maxUses || 50
     });
     setEditingCouponId(coupon._id);
     setIsCouponModalOpen(true);
@@ -90,18 +95,18 @@ export default function CouponManagerTab() {
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-emerald-400">Discount Coupons</h2>
-          <p className="text-sm text-gray-400">Create and manage promotional discount codes for your courses.</p>
+          <h2 className="text-2xl font-bold text-emerald-400">Discount Coupons & Limits Engine</h2>
+          <p className="text-sm text-gray-400">Create promotional codes with strict usage caps, minimum order rules, and expiry dates.</p>
         </div>
         <button 
           onClick={() => {
             setEditingCouponId(null);
-            setCouponFormData({ code: "", discountPercentage: 15, isActive: true, expiryDate: "", courseId: "", userId: "", maxUses: 100 });
+            setCouponFormData({ code: "", discountType: "PERCENTAGE", discountValue: 15, minOrderAmount: 0, isActive: true, expiryDate: "", courseId: "", userId: "", maxUses: 50 });
             setIsCouponModalOpen(true);
           }} 
           className="px-4 py-2 bg-emerald-900/30 text-emerald-400 rounded-lg text-sm font-bold border border-emerald-500/30 hover:bg-emerald-900/50 transition-colors flex items-center gap-2"
         >
-          <Plus className="w-4 h-4" /> Create New Coupon
+          <Plus className="w-4 h-4" /> Create Fixed Coupon
         </button>
       </div>
 
@@ -122,19 +127,20 @@ export default function CouponManagerTab() {
                 </div>
               </div>
 
-              <div className="text-3xl font-black text-white my-3">
-                {coupon.discountPercentage}% <span className="text-xs font-normal text-gray-400">OFF</span>
+              <div className="text-3xl font-black text-white my-3 flex items-baseline gap-1">
+                {coupon.discountType === "FLAT" ? `₹${coupon.discountValue || coupon.discountPercentage}` : `${coupon.discountValue || coupon.discountPercentage}%`} 
+                <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest">OFF ({coupon.discountType || "PERCENTAGE"})</span>
               </div>
 
               <div className="space-y-1.5 text-xs text-gray-400 mb-6 bg-black/30 p-3 rounded-xl border border-gray-800">
                 <div className="flex justify-between">
+                  <span>Min Order Required:</span> <span className="text-emerald-400 font-bold">₹{coupon.minOrderAmount || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Fixed Usage Cap:</span> <span className="text-amber-400 font-bold">{coupon.usageCount || 0} / {coupon.maxUses} Uses</span>
+                </div>
+                <div className="flex justify-between">
                   <span>Course Target:</span> <span className="text-white font-mono">{coupon.courseId || "All Courses"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>User Restriction:</span> <span className="text-white font-mono">{coupon.userId ? "User Specific" : "Public"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Usage Count:</span> <span className="text-white">{coupon.usageCount} / {coupon.maxUses}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Expires:</span> <span className="text-amber-400">{coupon.expiryDate ? new Date(coupon.expiryDate).toLocaleDateString() : "Never"}</span>
@@ -163,7 +169,7 @@ export default function CouponManagerTab() {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="glass-panel border border-emerald-500/30 rounded-3xl p-6 md:p-8 w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
             <div className="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
-              <h3 className="text-2xl font-black text-emerald-400">{editingCouponId ? "Edit Coupon" : "Create New Coupon"}</h3>
+              <h3 className="text-2xl font-black text-emerald-400">{editingCouponId ? "Edit Fixed Coupon" : "Create Fixed Coupon"}</h3>
               <button onClick={() => setIsCouponModalOpen(false)} className="p-2 bg-white/5 hover:bg-white/10 rounded-full transition-colors"><X className="w-5 h-5 text-gray-400"/></button>
             </div>
 
@@ -171,32 +177,41 @@ export default function CouponManagerTab() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Coupon Code</label>
-                  <input required value={couponFormData.code} onChange={e => setCouponFormData({...couponFormData, code: e.target.value})} className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-emerald-400 font-mono uppercase outline-none focus:border-emerald-500" placeholder="e.g. DIWALI50" />
+                  <input required value={couponFormData.code} onChange={e => setCouponFormData({...couponFormData, code: e.target.value})} className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-emerald-400 font-mono uppercase outline-none focus:border-emerald-500" placeholder="e.g. AYUSH50" />
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Discount Percentage (%)</label>
-                  <input required type="number" min="1" max="100" value={couponFormData.discountPercentage} onChange={e => setCouponFormData({...couponFormData, discountPercentage: Number(e.target.value)})} className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-emerald-500" placeholder="e.g. 50" />
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Discount Type</label>
+                  <select value={couponFormData.discountType} onChange={e => setCouponFormData({...couponFormData, discountType: e.target.value})} className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">
+                    <option value="PERCENTAGE">Percentage (%) OFF</option>
+                    <option value="FLAT">Flat INR (₹) OFF</option>
+                  </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Discount Value ({couponFormData.discountType === "FLAT" ? "₹" : "%"})</label>
+                  <input required type="number" min="1" value={couponFormData.discountValue} onChange={e => setCouponFormData({...couponFormData, discountValue: Number(e.target.value)})} className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-emerald-500" placeholder="e.g. 50 or 200" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Min Order Amount (₹)</label>
+                  <input required type="number" min="0" value={couponFormData.minOrderAmount} onChange={e => setCouponFormData({...couponFormData, minOrderAmount: Number(e.target.value)})} className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-emerald-500" placeholder="e.g. 499 (0 for no limit)" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Fixed Max Uses Limit</label>
+                  <input required type="number" min="1" value={couponFormData.maxUses} onChange={e => setCouponFormData({...couponFormData, maxUses: Number(e.target.value)})} className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-emerald-500" placeholder="e.g. 50 uses" />
+                </div>
+                <div>
                   <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Specific Course ID (Optional)</label>
                   <input value={couponFormData.courseId} onChange={e => setCouponFormData({...couponFormData, courseId: e.target.value})} className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-emerald-500" placeholder="e.g. sa1 (leave blank for all)" />
                 </div>
-                <div>
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Max Uses Limit</label>
-                  <input required type="number" value={couponFormData.maxUses} onChange={e => setCouponFormData({...couponFormData, maxUses: Number(e.target.value)})} className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-emerald-500" placeholder="e.g. 100" />
-                </div>
               </div>
 
               <div>
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Specific User UID (Optional)</label>
-                <input value={couponFormData.userId} onChange={e => setCouponFormData({...couponFormData, userId: e.target.value})} className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-emerald-500 font-mono text-xs" placeholder="Firebase UID if tied to single student" />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Expiry Date & Time (Optional)</label>
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Expiry Date (Optional)</label>
                 <input type="date" value={couponFormData.expiryDate} onChange={e => setCouponFormData({...couponFormData, expiryDate: e.target.value})} className="w-full bg-black/50 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-emerald-500" />
               </div>
 

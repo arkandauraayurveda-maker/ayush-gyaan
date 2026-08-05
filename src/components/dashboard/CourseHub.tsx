@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react"; // 🔥 Error Fix: useEffect imported here
-import { BookOpen, Compass, PlayCircle, ShoppingBag, CheckCircle2, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { BookOpen, Compass, PlayCircle, ShoppingBag, CheckCircle2, Loader2, Calendar, Sparkles, Bot } from "lucide-react";
 import Link from "next/link";
 import { auth } from "@/lib/firebase";
 
@@ -10,13 +10,11 @@ interface CourseHubProps {
 }
 
 export default function CourseHub({ enrolledCourses }: CourseHubProps) {
-  // 1. All States
   const [activeTab, setActiveTab] = useState<"enrolled" | "explore">("enrolled");
   const [buyingCourseId, setBuyingCourseId] = useState<string | null>(null);
   const [exploreCourses, setExploreCourses] = useState<any[]>([]);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
 
-  // 2. Fetch Courses Effect (Inside the function)
   useEffect(() => {
     if (activeTab === "explore" && exploreCourses.length === 0) {
       const fetchCourses = async () => {
@@ -37,7 +35,6 @@ export default function CourseHub({ enrolledCourses }: CourseHubProps) {
     }
   }, [activeTab, exploreCourses.length]);
 
-  // 3. Purchase Handler
   const handleBuyCourse = async (courseId: string) => {
     try {
       setBuyingCourseId(courseId);
@@ -52,7 +49,7 @@ export default function CourseHub({ enrolledCourses }: CourseHubProps) {
       const res = await fetch("/api/payment/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, courseId }),
+        body: JSON.stringify({ userId, courseId, aiPlan: "none" }),
       });
 
       const data = await res.json();
@@ -73,8 +70,8 @@ export default function CourseHub({ enrolledCourses }: CourseHubProps) {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "",
         amount: data.order.amount,
         currency: data.order.currency,
-        name: "AyushGyaan AI",
-        description: `Purchase Course: ${courseId}`,
+        name: "AyushGyaan Academy",
+        description: `Enrollment for ${courseId}`,
         order_id: data.order.id,
         handler: async function (response: any) {
           const verifyRes = await fetch("/api/payment/verify", {
@@ -91,7 +88,7 @@ export default function CourseHub({ enrolledCourses }: CourseHubProps) {
 
           const verifyData = await verifyRes.json();
           if (verifyData.success) {
-            alert("Course purchased successfully!");
+            alert("🎉 Course purchased successfully!");
             window.location.reload();
           } else {
             alert("Verification failed: " + verifyData.error);
@@ -140,7 +137,7 @@ export default function CourseHub({ enrolledCourses }: CourseHubProps) {
               activeTab === "enrolled" ? "bg-emerald-900/40 text-emerald-400 border border-emerald-500/30 shadow-md" : "text-gray-400 hover:text-white"
             }`}
           >
-            <BookOpen className="w-3.5 h-3.5" /> My Courses ({enrolledCourses.length})
+            <BookOpen className="w-3.5 h-3.5" /> My Active Courses ({enrolledCourses.length})
           </button>
           <button
             onClick={() => setActiveTab("explore")}
@@ -158,32 +155,32 @@ export default function CourseHub({ enrolledCourses }: CourseHubProps) {
           {enrolledCourses.length === 0 ? (
             <div className="col-span-full py-12 text-center bg-[#050B08]/50 rounded-2xl border border-emerald-900/20">
               <BookOpen className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-              <p className="text-gray-300 font-medium text-sm">No active courses found.</p>
+              <p className="text-gray-300 font-medium text-sm">No active courses found in your account.</p>
               <button 
                 onClick={() => setActiveTab("explore")}
                 className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-semibold hover:bg-emerald-500"
               >
-                Explore Courses
+                Browse Available Courses
               </button>
             </div>
           ) : (
             enrolledCourses.map((course, idx) => (
-              <div key={idx} className="bg-[#0A1410] border border-emerald-900/40 rounded-2xl p-5 flex flex-col justify-between">
+              <div key={idx} className="bg-[#0A1410] border border-emerald-900/40 rounded-2xl p-5 flex flex-col justify-between hover:border-emerald-500/40 transition-colors">
                 <div>
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
-                      Enrolled
+                      ACTIVE ENROLLMENT
                     </span>
                     <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                   </div>
-                  <h3 className="text-base font-bold text-white mb-1">{course.title || `Course ID: ${course.courseId}`}</h3>
-                  <p className="text-xs text-gray-400">Status: <span className="text-emerald-400 font-medium">{course.status}</span></p>
+                  <h3 className="text-base font-bold text-white mb-1">{course.title || `Course: ${course.courseId}`}</h3>
+                  <p className="text-xs text-gray-400">Status: <span className="text-emerald-400 font-medium">{course.status || "ACTIVE"}</span></p>
                 </div>
                 
                 <div className="mt-6 pt-4 border-t border-emerald-900/30 flex justify-between items-center">
-                  <span className="text-xs text-gray-400">Access: Lifetime</span>
-                  <Link href={`/courses/${course.courseId}`} className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300">
-                    <PlayCircle className="w-4 h-4" /> Continue Learning
+                  <span className="text-xs text-gray-400">NCISM Compliant</span>
+                  <Link href={`/samhita-reader?course=${course.courseId}`} className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-950/50 px-3 py-1.5 rounded-lg border border-emerald-500/30">
+                    <PlayCircle className="w-4 h-4" /> Open Samhita Reader
                   </Link>
                 </div>
               </div>
@@ -195,7 +192,7 @@ export default function CourseHub({ enrolledCourses }: CourseHubProps) {
           {isLoadingCourses ? (
             <div className="col-span-full py-12 flex flex-col items-center justify-center text-emerald-500">
               <Loader2 className="w-8 h-8 animate-spin mb-2" />
-              <p className="text-xs font-medium uppercase tracking-widest text-emerald-400/80">Fetching Global Store...</p>
+              <p className="text-xs font-medium uppercase tracking-widest text-emerald-400/80">Fetching Global Course Store...</p>
             </div>
           ) : exploreCourses.length === 0 ? (
             <div className="col-span-full py-12 text-center text-gray-400">
@@ -203,28 +200,41 @@ export default function CourseHub({ enrolledCourses }: CourseHubProps) {
             </div>
           ) : (
             exploreCourses.map((course) => (
-              <div key={course.courseId} className="bg-[#050B08]/80 border border-emerald-900/30 rounded-2xl p-5 flex flex-col justify-between hover:border-emerald-500/40 transition-all">
+              <div key={course.courseId || course._id} className="bg-[#050B08]/80 border border-emerald-900/30 rounded-2xl p-5 flex flex-col justify-between hover:border-emerald-500/40 transition-all relative">
+                
+                {course.isPreRegister && (
+                  <span className="absolute top-3 right-3 bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                    <Calendar className="w-3 h-3"/> Launching {course.launchDate || "Soon"}
+                  </span>
+                )}
+
                 <div>
-                  <div className="flex justify-between items-center mb-2">
+                  <div className="flex justify-between items-center mb-2 pr-24">
                     <span className="text-[10px] uppercase font-bold text-blue-400 bg-blue-950/80 px-2.5 py-0.5 rounded-full border border-blue-500/30">
-                      {course.category || "Samhita"}
+                      {course.prof || "BAMS"}
                     </span>
-                    <span className="text-base font-bold text-white">₹{course.price}</span>
                   </div>
                   <h3 className="text-base font-bold text-white mb-1">{course.title}</h3>
-                  <p className="text-xs text-gray-400 leading-relaxed line-clamp-2">{course.description}</p>
+                  <div className="text-xl font-black text-amber-400 mb-2">{course.price}</div>
                 </div>
 
-                <div className="mt-6 pt-4 border-t border-emerald-900/30 flex justify-between items-center">
-                  <span className="text-xs text-gray-500">BAMS Standard</span>
-                  <button 
-                    onClick={() => handleBuyCourse(course.courseId)}
-                    disabled={buyingCourseId === course.courseId}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl text-xs font-semibold hover:opacity-90 shadow-lg shadow-emerald-500/20"
-                  >
-                    {buyingCourseId === course.courseId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShoppingBag className="w-3.5 h-3.5" />}
-                    Buy Now
-                  </button>
+                <div className="mt-4 pt-4 border-t border-emerald-900/30 flex justify-between items-center">
+                  <span className="text-xs text-gray-500">{course.duration}</span>
+                  
+                  {course.isPreRegister ? (
+                    <a href="/#early-bird" className="flex items-center gap-1 px-3.5 py-1.5 bg-amber-500/10 text-amber-400 rounded-xl text-xs font-bold border border-amber-500/30 hover:bg-amber-500/20">
+                      <Sparkles className="w-3.5 h-3.5"/> Pre-Register
+                    </a>
+                  ) : (
+                    <button 
+                      onClick={() => handleBuyCourse(course.courseId || course._id)}
+                      disabled={buyingCourseId === (course.courseId || course._id)}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl text-xs font-semibold hover:opacity-90 shadow-lg shadow-emerald-500/20"
+                    >
+                      {buyingCourseId === (course.courseId || course._id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShoppingBag className="w-3.5 h-3.5" />}
+                      Enroll Now
+                    </button>
+                  )}
                 </div>
               </div>
             ))

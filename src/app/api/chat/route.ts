@@ -53,12 +53,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const { isVoice } = body;
+    const isMultimodalQuery = Boolean(image || isVoice);
+
     const today = new Date().setHours(0, 0, 0, 0);
     const lastActive = user.aiPlan?.lastActiveDate ? new Date(user.aiPlan.lastActiveDate).setHours(0, 0, 0, 0) : 0;
+    
+    // Check limit based on request type
+    const defaultTextLimits: Record<string, number> = { basic: 10, plus: 100, pro: 9999 };
+    const defaultMultimodalLimits: Record<string, number> = { basic: 3, plus: 25, pro: 9999 };
+
+    const configuredLimit = isMultimodalQuery
+      ? (settings?.aiMultimodalLimits?.[currentTier as keyof typeof defaultMultimodalLimits] ?? defaultMultimodalLimits[currentTier] ?? 3)
+      : (typeof settings?.aiLimits?.[currentTier as keyof typeof defaultTextLimits] === "number" 
+          ? settings.aiLimits[currentTier as keyof typeof defaultTextLimits] 
+          : defaultTextLimits[currentTier] ?? 10);
+
     let availableTokens = user.aiPlan?.tokens ?? 0;
 
     if (today > lastActive || !user.aiPlan?.lastActiveDate) {
-      availableTokens = adminLimits[currentTier] || 10;
+      availableTokens = configuredLimit;
       if (!user.aiPlan) user.aiPlan = {};
       user.aiPlan.tokens = availableTokens;
       user.aiPlan.tier = currentTier;
@@ -68,7 +82,10 @@ export async function POST(req: NextRequest) {
 
     // 🛑 4. TOKEN LIMIT CHECK
     if (availableTokens <= 0) {
-      return NextResponse.json({ success: false, error: "limit_exceeded_अपग्रेड" }, { status: 403 });
+      const msg = isMultimodalQuery 
+        ? "इमेज/वॉइस प्रश्नों की दैनिक सीमा समाप्त हो गई है। कृपया अपने प्लान को अपग्रेड करें।" 
+        : "limit_exceeded_अपग्रेड";
+      return NextResponse.json({ success: false, error: msg }, { status: 403 });
     }
 
     // 🔒 5. COURSE ACCESS VERIFICATION
@@ -127,7 +144,7 @@ export async function POST(req: NextRequest) {
     } else {
       if (message && message.trim().length > 3) {
         try {
-          const embeddingModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
+          const embeddingModel = genAI.getGenerativeModel({ model: "gemini-embedding-2" });
           const embeddingResult = await embeddingModel.embedContent(message);
           const queryVector = embeddingResult.embedding.values;
 

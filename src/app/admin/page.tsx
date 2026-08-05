@@ -11,20 +11,18 @@ import Sidebar from "./components/Sidebar";
 import SamhitaManagerTab from "./components/SamhitaManagerTab"; 
 import CourseManagerTab from "./components/CourseManagerTab";
 import LeadsManagerTab from "./components/LeadsManagerTab";
-import StudentManagerTab from "./components/StudentManagerTab";
+import StudentSubscriptionManagerTab from "./components/StudentSubscriptionManagerTab";
 import CouponManagerTab from "./components/CouponManagerTab";
 import InstitutionManagerTab from "./components/InstitutionManagerTab";
-// 🔥 NEW AI COMPONENTS IMPORTED
+// 🔥 AI TABS IMPORTED
 import ChatAnalyticsTab from "./components/ChatAnalyticsTab";
 import GlobalSettingsTab from "./components/GlobalSettingsTab";
-import SubscriptionManagerTab from "./components/SubscriptionManagerTab"; // ✅ NEW TAB ADDED
 
 export default function AdminDashboard() {
   const router = useRouter();
   
   const [isAdminAuthorized, setIsAdminAuthorized] = useState(false);
   
-  // 🔥 Added "SUBSCRIPTIONS" to activeTab types
   const [activeTab, setActiveTab] = useState<"SAMHITA" | "STUDENTS" | "COURSES" | "LEADS" | "COUPONS" | "INSTITUTIONS" | "AI_CHAT_LOGS" | "GLOBAL_SETTINGS" | "SUBSCRIPTIONS">("SAMHITA");
 
   useEffect(() => {
@@ -59,14 +57,13 @@ export default function AdminDashboard() {
           {activeTab === "SAMHITA" && <SamhitaManagerTab key="samhita" />}
           {activeTab === "COURSES" && <CourseManagerTab key="courses" />}
           {activeTab === "LEADS" && <LeadsManagerTab key="leads" />}
-          {activeTab === "STUDENTS" && <StudentManagerTab key="students" />}
+          {(activeTab === "STUDENTS" || activeTab === "SUBSCRIPTIONS") && <StudentSubscriptionManagerTab key="students_sub" />}
           {activeTab === "COUPONS" && <CouponManagerTab key="coupons" />}
           {activeTab === "INSTITUTIONS" && <InstitutionManagerTab key="institutions" />}
           
-          {/* 🔥 NEW AI TABS RENDER LOGIC */}
+          {/* 🔥 AI TABS RENDER LOGIC */}
           {activeTab === "AI_CHAT_LOGS" && <ChatAnalyticsTab key="ai_logs" />}
           {activeTab === "GLOBAL_SETTINGS" && <GlobalSettingsTab key="global_settings" />}
-          {activeTab === "SUBSCRIPTIONS" && <SubscriptionManagerTab key="subscriptions" />}
         </AnimatePresence>
       </main>
     </div>

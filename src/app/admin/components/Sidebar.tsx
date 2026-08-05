@@ -50,11 +50,8 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
 
         {/* 👥 USER MANAGEMENT */}
         <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1 mt-2">User Management</div>
-        <button onClick={() => setActiveTab("SUBSCRIPTIONS")} className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${activeTab === "SUBSCRIPTIONS" ? "bg-amber-900/30 text-amber-400 border border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.1)]" : "text-gray-400 hover:bg-white/5"}`}>
-          <Crown className="w-4 h-4" /> Subscriptions & Roles
-        </button>
-        <button onClick={() => setActiveTab("STUDENTS")} className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${activeTab === "STUDENTS" ? "bg-blue-900/30 text-blue-400 border border-blue-500/50" : "text-gray-400 hover:bg-white/5"}`}>
-          <Users className="w-4 h-4" /> App Students
+        <button onClick={() => setActiveTab("STUDENTS")} className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${activeTab === "STUDENTS" || activeTab === "SUBSCRIPTIONS" ? "bg-emerald-900/30 text-emerald-400 border border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.1)]" : "text-gray-400 hover:bg-white/5"}`}>
+          <Users className="w-4 h-4" /> Students & Subscriptions
         </button>
         <button onClick={() => setActiveTab("INSTITUTIONS")} className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all pb-6 ${activeTab === "INSTITUTIONS" ? "bg-blue-900/30 text-blue-400 border border-blue-500/50" : "text-gray-400 hover:bg-white/5"}`}>
           <Building2 className="w-4 h-4" /> Manage Institutions

@@ -1,13 +1,17 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/mongodb";
 import User from "@/models/User";
+import { verifyAdminAuth } from "@/lib/authMiddleware";
 
 // 🔥 NEXT.JS MAGIC: Is line se Next.js purana data save (cache) nahi karega
 // Aur har baar database se fresh list aayegi!
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const { errorResponse } = await verifyAdminAuth(req);
+    if (errorResponse) return errorResponse;
+
     await connectToDatabase();
     
     // Naye students sabse upar dikhane ke liye sort({ createdAt: -1 }) lagaya hai

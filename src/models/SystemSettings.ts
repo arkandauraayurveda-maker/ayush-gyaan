@@ -9,6 +9,11 @@ export interface ISystemSettings extends Document {
     pro: string;
   };
   aiLimits: {
+    basic: number | { text: number; multimodal: number };
+    plus: number | { text: number; multimodal: number };
+    pro: number | { text: number; multimodal: number };
+  };
+  aiMultimodalLimits?: {
     basic: number;
     plus: number;
     pro: number;
@@ -27,16 +32,23 @@ const SystemSettingsSchema = new Schema<ISystemSettings>({
   
   // 🧠 AI Models for each tier
   aiModels: {
-    basic: { type: String, default: "gemini-3.5-flash-lite" },
-    plus: { type: String, default: "gemini-3.5-flash" },
-    pro: { type: String, default: "gemini-3.6-flash" } // 🔥 FIXED TYPO HERE
+    basic: { type: String, default: "gemini-1.5-flash-8b" },
+    plus: { type: String, default: "gemini-1.5-flash" },
+    pro: { type: String, default: "gemini-1.5-pro" }
   },
 
-  // 📉 Daily Token Limits for each tier (Admin Controlled)
+  // 📉 Daily Text Query Limits for each tier
   aiLimits: {
-    basic: { type: Number, default: 10 },    // Free Users
-    plus: { type: Number, default: 100 },    // Plus Users
-    pro: { type: Number, default: 9999 }     // Pro Users (Unlimited)
+    basic: { type: Schema.Types.Mixed, default: 10 },    // Free Users
+    plus: { type: Schema.Types.Mixed, default: 100 },    // Plus Users
+    pro: { type: Schema.Types.Mixed, default: 9999 }     // Pro Users (Unlimited)
+  },
+
+  // 📸 Daily Multimodal (Image/Voice) Limits for each tier
+  aiMultimodalLimits: {
+    basic: { type: Number, default: 3 },
+    plus: { type: Number, default: 25 },
+    pro: { type: Number, default: 9999 }
   },
 
   // 💰 Pricing for Upgrades in INR (Admin Controlled)
@@ -46,7 +58,7 @@ const SystemSettingsSchema = new Schema<ISystemSettings>({
     pro: { type: Number, default: 499 }      // Pro Plan Price
   },
   
-  maintenanceMode: { type: Boolean, default: false } // भविष्य के लिए
+  maintenanceMode: { type: Boolean, default: false }
 }, { timestamps: true });
 
 export default models.SystemSettings || mongoose.model<ISystemSettings>("SystemSettings", SystemSettingsSchema);

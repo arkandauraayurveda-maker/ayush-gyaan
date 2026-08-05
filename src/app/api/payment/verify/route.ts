@@ -3,10 +3,11 @@ import crypto from "crypto";
 import connectToDatabase from "@/lib/mongodb";
 import Order from "@/models/Order";
 import User from "@/models/User";
+import Coupon from "@/models/Coupon";
 
 export async function POST(req: NextRequest) {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, userId, courseId, aiPlan } = await req.json();
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, userId, courseId, aiPlan, appliedCouponCode } = await req.json();
     
     // 1. 🛡️ VERIFY SIGNATURE (Security Core)
     const secret = process.env.RAZORPAY_KEY_SECRET;
@@ -36,9 +37,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Order not found in DB" }, { status: 404 });
     }
 
+    // 🏷️ ATOMICAL INCREMENT COUPON USAGE COUNT
+    const couponToIncrement = appliedCouponCode || order.appliedCoupon;
+    if (couponToIncrement && couponToIncrement !== "none") {
+      await Coupon.findOneAndUpdate(
+        { code: couponToIncrement.toUpperCase() },
+        { $inc: { usageCount: 1 } }
+      );
+    }
+
     const updateQuery: any = { $set: {} };
 
-    // 3. 🎓 GRANT COURSE ACCESS (सिर्फ़ तब, जब courseId मौजूद हो)
+    // 3. 🎓 GRANT COURSE ACCESS
     if (courseId) {
       const expiryDate = new Date();
       expiryDate.setFullYear(expiryDate.getFullYear() + 1); // 1 Year Access default
@@ -57,12 +67,12 @@ export async function POST(req: NextRequest) {
     // 4. 🤖 CONFIGURE AI PLAN & TOKENS
     if (aiPlan && aiPlan !== "none") {
       let tokensToAssign = 0;
-      if (aiPlan === "pro") tokensToAssign = 9999; // Unlimited for PRO
+      if (aiPlan === "pro") tokensToAssign = 9999;
       else if (aiPlan === "plus") tokensToAssign = 1000;
       else if (aiPlan === "basic") tokensToAssign = 50;
 
       const nextRefill = new Date();
-      nextRefill.setMonth(nextRefill.getMonth() + 1); // Token validity 1 month
+      nextRefill.setMonth(nextRefill.getMonth() + 1);
 
       updateQuery.$set = {
         "aiPlan.tier": aiPlan,
@@ -73,7 +83,6 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. 🚀 UPDATE USER PROFILE IN DATABASE
-    // अगर updateQuery.$set खाली है, तो उसे हटा दें ताकि MongoDB एरर न दे
     if (Object.keys(updateQuery.$set).length === 0) delete updateQuery.$set;
 
     await User.findOneAndUpdate(

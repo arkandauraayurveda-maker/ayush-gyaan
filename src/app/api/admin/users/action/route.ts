@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/mongodb";
 import User from "@/models/User";
+import { verifyAdminAuth } from "@/lib/authMiddleware";
 
 export async function POST(req: NextRequest) {
   try {
+    const { errorResponse } = await verifyAdminAuth(req);
+    if (errorResponse) return errorResponse;
+
     const body = await req.json();
     // 🔥 Frontend se aane wale naye fields (role, tier, tokens, validityMonths) add kiye
     const { userId, action, courseId, planType, role, tier, tokens, validityMonths } = body; 
