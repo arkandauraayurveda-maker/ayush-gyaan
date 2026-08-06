@@ -2,7 +2,7 @@ import connectToDatabase from "@/lib/mongodb";
 import AIRequestLog from "@/models/AIRequestLog";
 import SystemSettings from "@/models/SystemSettings";
 import { calculateAICostInr } from "@/lib/aiPricingEngine";
-import { crypto } from "crypto";
+import { randomUUID } from "crypto";
 
 export interface LogAIRequestParams {
   userId: string;
