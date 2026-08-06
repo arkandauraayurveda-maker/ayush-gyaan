@@ -10,14 +10,11 @@ import { checkRateLimit } from "@/lib/rateLimiter";
 import { logAIRequest } from "@/lib/aiLogService";
 
 const VALID_MODEL_MAPPING: Record<string, string> = {
-  "basic": "gemini-1.5-flash-8b",
-  "plus": "gemini-1.5-flash",
-  "pro": "gemini-1.5-pro"
+  basic: "gemini-1.5-flash-8b",
+  plus: "gemini-1.5-flash",
+  pro: "gemini-1.5-pro"
 };
 
-/**
- * Uses configured model name directly, fallback only if completely empty.
- */
 function sanitizeModelName(configuredName?: string, fallbackTier: string = "basic"): string {
   if (!configuredName || typeof configuredName !== "string" || !configuredName.trim()) {
     return VALID_MODEL_MAPPING[fallbackTier] || "gemini-1.5-flash";
@@ -27,39 +24,39 @@ function sanitizeModelName(configuredName?: string, fallbackTier: string = "basi
 
 export async function POST(req: NextRequest) {
   try {
-    // 🛡️ 1. AUTHENTICATION & SECURITY
     const authHeader = req.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json({ success: false, error: "अवैध प्रमाणीकरण (Unauthorized Access)" }, { status: 401 });
+      return NextResponse.json({ success: false, error: "Unauthorized Access" }, { status: 401 });
     }
 
     const idToken = authHeader.split("Bearer ")[1];
     const decodedToken = await adminAuth.verifyIdToken(idToken);
 
-    // 🛑 RATE LIMIT CHECK (Prevent abuse & infinite loops)
     const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0] || "127.0.0.1";
     const rateCheck = checkRateLimit(decodedToken.uid || clientIp, 15, 60000);
     if (!rateCheck.allowed) {
       return NextResponse.json({
         success: false,
-        error: `अनुरोध सीमा पार (Too Many Requests)। कृपया ${Math.ceil(rateCheck.resetTimeMs / 1000)} सेकंड प्रतीक्षा करें।`
+        error: "Too Many Requests"
       }, { status: 429 });
     }
 
     let body;
-    try { body = await req.json(); }
-    catch (e) { return NextResponse.json({ success: false, error: "अमान्य अनुरोध (Invalid Request)" }, { status: 400 }); }
+    try {
+      body = await req.json();
+    } catch (e) {
+      return NextResponse.json({ success: false, error: "Invalid Request" }, { status: 400 });
+    }
 
     const { message, image, history, courseId } = body;
     if (!message && !image) {
-      return NextResponse.json({ success: false, error: "कृपया कोई प्रश्न पूछें या चित्र संलग्न करें।" }, { status: 400 });
+      return NextResponse.json({ success: false, error: "Prompt or image required" }, { status: 400 });
     }
 
     await connectToDatabase();
 
-    // 👤 2. FETCH USER & ADMIN SETTINGS
     const user = await User.findOne({ uid: decodedToken.uid });
-    if (!user) return NextResponse.json({ success: false, error: "उपयोगकर्ता नहीं मिला (User not found)" }, { status: 404 });
+    if (!user) return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
 
     const settings = await SystemSettings.findOne({ settingId: "global_settings" });
 
@@ -69,7 +66,6 @@ export async function POST(req: NextRequest) {
       pro: "gemini-1.5-pro"
     };
 
-    // 🕒 3. PLAN EXPIRY & DAILY TOKEN RESET
     let currentTier = (user.aiPlan?.tier || "basic").toLowerCase();
     if (currentTier === "free") currentTier = "basic";
 
@@ -85,14 +81,14 @@ export async function POST(req: NextRequest) {
 
     const today = new Date().setHours(0, 0, 0, 0);
     const lastActive = user.aiPlan?.lastActiveDate ? new Date(user.aiPlan.lastActiveDate).setHours(0, 0, 0, 0) : 0;
-    
+
     const defaultTextLimits: Record<string, number> = { basic: 10, plus: 100, pro: 9999 };
     const defaultMultimodalLimits: Record<string, number> = { basic: 3, plus: 25, pro: 9999 };
 
     const configuredLimit = isMultimodalQuery
       ? (settings?.aiMultimodalLimits?.[currentTier as keyof typeof defaultMultimodalLimits] ?? defaultMultimodalLimits[currentTier] ?? 3)
-      : (typeof settings?.aiLimits?.[currentTier as keyof typeof defaultTextLimits] === "number" 
-          ? settings.aiLimits[currentTier as keyof typeof defaultTextLimits] 
+      : (typeof settings?.aiLimits?.[currentTier as keyof typeof defaultTextLimits] === "number"
+          ? settings.aiLimits[currentTier as keyof typeof defaultTextLimits]
           : defaultTextLimits[currentTier] ?? 10);
 
     let availableTokens = user.aiPlan?.tokens ?? 0;
@@ -106,29 +102,24 @@ export async function POST(req: NextRequest) {
       await user.save();
     }
 
-    // 🛑 4. TOKEN LIMIT CHECK (CHECKED BEFORE CALLING GEMINI API)
     if (availableTokens <= 0) {
-      const msg = isMultimodalQuery 
-        ? "इमेज/वॉइस प्रश्नों की दैनिक सीमा समाप्त हो गई है। कृपया अपने प्लान को अपग्रेड करें।" 
-        : "limit_exceeded_अपग्रेड";
+      const msg = isMultimodalQuery
+        ? "Limit Exceeded"
+        : "limit_exceeded_upgrade";
       return NextResponse.json({ success: false, error: msg }, { status: 403 });
     }
 
-    // 🔒 5. COURSE ACCESS VERIFICATION
     if (courseId) {
       const hasAccess = user.purchasedCourses?.some(
         (pc: any) => pc.courseId === courseId && pc.status === "ACTIVE"
       );
       if (!hasAccess && currentTier !== "pro") {
-        return NextResponse.json({ success: false, error: "इस पाठ्यक्रम तक पहुँचने के लिए पहले इसे खरीदें।" }, { status: 403 });
+        return NextResponse.json({ success: false, error: "Course Access Required" }, { status: 403 });
       }
     }
 
-    // ==========================================
-    // 🚀 6. SMART ROUTER: DIRECT DB FETCH (0 TOKENS & ZERO API COST)
-    // ==========================================
     if (!image && message) {
-      const shlokaPattern = /(?:अध्याय|chapter|ch)?\s*(\d+)\s*(?:श्लोक|shloka|[\/\.\-])\s*(\d+[a-zA-Z]*)|(?:चरक|सुश्रुत|अष्टांग|samhita)\s*(?:अध्याय)?\s*(\d+)\s*[\/\.\-]\s*(\d+)/i;
+      const shlokaPattern = /(?:chapter|ch)?\s*(\d+)\s*(?:shloka|[\/\.\-])\s*(\d+[a-zA-Z]*)|(?:samhita)\s*(?:chapter)?\s*(\d+)\s*[\/\.\-]\s*(\d+)/i;
       const match = message.match(shlokaPattern);
 
       if (match) {
@@ -144,9 +135,9 @@ export async function POST(req: NextRequest) {
           if (directShlokas && directShlokas.length > 0) {
             const fullOriginalShloka = directShlokas.map(s => s.originalShloka).join("\n");
             const fullTranslation = directShlokas[0].translationHindi || "";
-            const samhitaInfo = `${directShlokas[0].samhitaName || 'संहिता'} (${directShlokas[0].sthana || 'स्थान'}), अध्याय: ${directShlokas[0].chapter}, श्लोक: ${shlokaNo}`;
+            const samhitaInfo = `${directShlokas[0].samhitaName || "Samhita"} (${directShlokas[0].sthana || "Sthana"}), Chapter: ${directShlokas[0].chapter}, Shloka: ${shlokaNo}`;
 
-            const directReply = `📚 **सटीक संहिता संदर्भ (Direct DB Match):** ${samhitaInfo}\n\n> 📜 **मूल श्लोक:**\n> ${fullOriginalShloka}\n\n🌿 **भावार्थ:**\n${fullTranslation}`;
+            const directReply = `Direct Samhita Reference Match: ${samhitaInfo}\n\nOriginal Shloka:\n${fullOriginalShloka}\n\nTranslation:\n${fullTranslation}`;
 
             return NextResponse.json({
               success: true,
@@ -158,16 +149,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 📚 7. VECTOR DATABASE (RAG) & DYNAMIC PROMPTING
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
     let retrievedSlokas = "";
     let finalSystemInstruction = "";
 
     if (image) {
-      finalSystemInstruction = `आप 'आयुष-ज्ञान AI' हैं—एक विशेषज्ञ आयुर्वेदाचार्य और परीक्षा गाइड। 
-चित्र में दिए गए प्रश्न पत्र या हस्तलिखित प्रश्नों का आयुर्वेदिक दृष्टिकोण से विश्लेषण करें।
-यदि चित्र में कई प्रश्न (Q1, Q2, Q3...) हैं, तो प्रत्येक प्रश्न का क्रमबद्ध (Step-by-Step) उत्तर दें।
-उत्तर में उपलब्ध होने पर सटीक संस्कृत श्लोक और संहिता संदर्भ आवश्यक रूप से दें।`;
+      finalSystemInstruction = `You are 'AyushGyaan AI'—an expert BAMS teacher and exam guide. 
+Analyze the uploaded question paper or handwritten notes. Provide step-by-step answers for Q1, Q2, Q3...
+Include original Sanskrit Shlokas and Samhita references when available.`;
     } else {
       if (message && message.trim().length > 3) {
         try {
@@ -187,7 +176,7 @@ export async function POST(req: NextRequest) {
 
           if (searchResults && searchResults.length > 0) {
             retrievedSlokas = searchResults.map(s =>
-              `संदर्भ: ${s.samhitaName || 'अज्ञात'} (${s.sthana || ''}), अध्याय: ${s.chapter}, श्लोक: ${s.shlokaNumber}\nमूल: ${s.originalShloka || ''}\nअर्थ: ${s.translationHindi || ''}\nविमर्श: ${s.vimarsh || ''}\nमेटा-टैग्स: ${s.metaTags || 'N/A'}`
+              `Ref: ${s.samhitaName || "Unknown"} (${s.sthana || ""}), Chapter: ${s.chapter}, Shloka: ${s.shlokaNumber}\nShloka: ${s.originalShloka || ""}\nMeaning: ${s.translationHindi || ""}`
             ).join("\n\n---\n\n");
           } else {
             retrievedSlokas = "NO_DATA_FOUND";
@@ -197,16 +186,41 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      finalSystemInstruction = `आप 'आयुष-ज्ञान AI' हैं—एक friendly, casual और supportive BAMS AI Study Companion। 
+      finalSystemInstruction = `You are 'AyushGyaan AI'—a friendly, supportive BAMS AI Study Companion.
 
-छात्र से बातचीत करते समय इन नियमों का 100% पालन करें:
+Rules:
+1. Tone: Friendly, clear Hinglish or easy Hindi. Keep terminology accurate (Vata, Pitta, Kapha, Tridosha, Agni, Srotas, Dhatu, Ojas, Nidan, Samprapti, Chikitsa Sutra).
+2. Question Paper Formatting:
+   - Short Note (5 Marks): Max 150 words.
+   - Long Essay (10 Marks): Max 400 words (Nidan, Samprapti, Laksana, Chikitsa Sutra).
+   - MANDATORY SHLOKA REFERENCE: Always quote original Sanskrit Shloka in blockquotes (> Shloka) with Samhita reference whenever context contains Shloka.
+3. Zero Hallucination: If context is NO_DATA_FOUND, politely respond that this topic is currently being added to digital samhitas.
 
-1. **फ्रेंडली टोन और सहजता:**
-   छात्र से आसान Hinglish या प्राकृतिक हिंदी में बात करें। भारी कठिन हिंदी या क्लिष्ट संस्कृत वाक्यांशों का प्रयोग न करें।
+=== Retrieved Database Context ===
+${retrievedSlokas}`;
+    }
 
-2. **परीक्षा उत्तर संरचना और अनिवार्य श्लोक संदर्भ (Mandatory Shloka Reference):**
-   - **लघु उत्तर (5 Marks / Short Note):** अधिकतम **150 शब्दों** में स्पष्ट, पॉइंट-टू-पॉइंट और परीक्षा-केंद्रित उत्तर दें।
-   - **दीर्घ उत्तर (10 Marks / Long Essay):** अधिकतम **400 शब्दों** में विस्तृत उत्तर दें (निदान, सम्प्राप्ति, लक्षण, चिकित्�    // ⚙️ 10. AI ENGINE EXECUTION WITH CONVERSATIONAL CHAT MEMORY
+    const sanitizedHistory: any[] = [];
+    if (Array.isArray(history)) {
+      const rawHistory = history
+        .filter((msg: any) => msg && msg.role)
+        .map((msg: any) => ({
+          role: (msg.role === "assistant" || msg.role === "model") ? "model" : "user",
+          parts: [{ text: msg.content || (msg.parts?.[0]?.text) || "" }]
+        }));
+
+      let expectedRole = "user";
+      for (const msg of rawHistory) {
+        if (msg.role === expectedRole) {
+          sanitizedHistory.push(msg);
+          expectedRole = expectedRole === "user" ? "model" : "user";
+        }
+      }
+      if (sanitizedHistory.length > 0 && sanitizedHistory[sanitizedHistory.length - 1].role === "user") {
+        sanitizedHistory.pop();
+      }
+    }
+
     const primaryModelName = adminModels[currentTier] || "gemini-1.5-flash";
     const basicModelName = adminModels["basic"] || "gemini-1.5-flash-8b";
     let finalAiReply = "";
@@ -214,17 +228,17 @@ export async function POST(req: NextRequest) {
     const generateAIResponse = async (modelName: string, tierKey: string) => {
       const safeModel = sanitizeModelName(modelName, tierKey);
       const startTime = Date.now();
-      
-      const chatModel = genAI.getGenerativeModel({ 
+
+      const chatModel = genAI.getGenerativeModel({
         model: safeModel,
         systemInstruction: finalSystemInstruction
       });
 
       let res: any;
       if (image) {
-        const base64Data = image.split(',')[1];
+        const base64Data = image.split(",")[1];
         res = await chatModel.generateContent([
-          message || "चित्र में दिए गए आयुर्वेदिक प्रश्नों का विश्लेषण करें",
+          message || "Analyze the attached question paper image",
           { inlineData: { data: base64Data, mimeType: "image/jpeg" } }
         ]);
       } else {
@@ -237,7 +251,6 @@ export async function POST(req: NextRequest) {
       const latencyMs = Date.now() - startTime;
       const usageMetadata = res?.response?.usageMetadata || res?.usageMetadata;
 
-      // 📊 LOG METADATA TO AIRequestLog IN BACKGROUND
       logAIRequest({
         userId: decodedToken.uid,
         featureName: image ? "Image Analysis" : (body.featureName || "Chat"),
@@ -257,7 +270,7 @@ export async function POST(req: NextRequest) {
     try {
       finalAiReply = await generateAIResponse(primaryModelName, currentTier);
     } catch (primaryError: any) {
-      console.warn(`[AI Engine] Primary model '${primaryModelName}' failed. Error: ${primaryError?.message}. Silently falling back to basic model.`);
+      console.warn(`[AI Engine] Primary model '${primaryModelName}' failed. Falling back to basic model.`);
       try {
         finalAiReply = await generateAIResponse(basicModelName, "basic");
       } catch (fallbackError: any) {
@@ -275,88 +288,14 @@ export async function POST(req: NextRequest) {
           errorMessage: fallbackError?.message || "All models failed"
         }).catch(() => {});
 
-        return NextResponse.json({ 
-          success: true, 
-          reply: "आयुष-ज्ञान AI: यह जानकारी हमारी डिजिटल संहितों में अपडेट हो रही है। यह सुविधा शीघ्र उपलब्ध होगी! (Feature available soon)",
-          remainingTokens: availableTokens
-        }, { status: 200 });
-      }
-    }��़ने की प्रक्रिया में है (Developing stage)। हमारी टीम लगातार नई संहिताओं और विमर्श को अपडेट कर रही है। शीघ्र ही यह उपलब्ध होगा।"
-
-=== Retrieved Database Context ===
-${retrievedSlokas}
-================ failure instructions ==================`;
-    }
-
-    // 🧠 9. HISTORY SANITIZATION & CONTEXT RETENTION
-    const sanitizedHistory: any[] = [];
-    if (Array.isArray(history)) {
-      const rawHistory = history
-        .filter((msg: any) => msg && msg.role && !msg.content?.includes("⚠️") && !msg.content?.includes("अपग्रेड"))
-        .map((msg: any) => ({
-          role: (msg.role === "assistant" || msg.role === "model") ? "model" : "user",
-          parts: [{ text: msg.content || (msg.parts?.[0]?.text) || "" }]
-        }));
-
-      let expectedRole = "user";
-      for (const msg of rawHistory) {
-        if (msg.role === expectedRole) {
-          sanitizedHistory.push(msg);
-          expectedRole = expectedRole === "user" ? "model" : "user";
-        }
-      }
-      if (sanitizedHistory.length > 0 && sanitizedHistory[sanitizedHistory.length - 1].role === "user") {
-        sanitizedHistory.pop();
-      }
-    }
-
-    // ⚙️ 10. AI ENGINE EXECUTION WITH CONVERSATIONAL CHAT MEMORY
-    const primaryModelName = adminModels[currentTier] || "gemini-1.5-flash";
-    const basicModelName = adminModels["basic"] || "gemini-1.5-flash-8b";
-    let finalAiReply = "";
-
-    const generateAIResponse = async (modelName: string, tierKey: string) => {
-      const safeModel = sanitizeModelName(modelName, tierKey);
-      
-      const chatModel = genAI.getGenerativeModel({ 
-        model: safeModel,
-        systemInstruction: finalSystemInstruction
-      });
-
-      if (image) {
-        const base64Data = image.split(',')[1];
-        const res = await chatModel.generateContent([
-          message || "चित्र में दिए गए आयुर्वेदिक प्रश्नों का विश्लेषण करें",
-          { inlineData: { data: base64Data, mimeType: "image/jpeg" } }
-        ]);
-        return res.response.text();
-      } else {
-        const chat = chatModel.startChat({
-          history: sanitizedHistory
-        });
-        
-        const res = await chat.sendMessage(message);
-        return res.response.text();
-      }
-    };
-
-    try {
-      finalAiReply = await generateAIResponse(primaryModelName, currentTier);
-    } catch (primaryError: any) {
-      console.warn(`[AI Engine] Primary model '${primaryModelName}' failed. Error: ${primaryError?.message}. Silently falling back to basic model.`);
-      try {
-        finalAiReply = await generateAIResponse(basicModelName, "basic");
-      } catch (fallbackError: any) {
-        console.error("AI Fallback failed:", fallbackError);
-        return NextResponse.json({ 
-          success: true, 
-          reply: "आयुष-ज्ञान AI: यह जानकारी हमारी डिजिटल संहिताओं में अपडेट हो रही है। यह सुविधा शीघ्र उपलब्ध होगी! (Feature available soon)",
+        return NextResponse.json({
+          success: true,
+          reply: "AyushGyaan AI: This topic is currently being added to our digital samhitas. Available soon!",
           remainingTokens: availableTokens
         }, { status: 200 });
       }
     }
 
-    // 📉 11. DEDUCT TOKEN & LOG CHAT FOR ADMIN ANALYTICS
     await User.findOneAndUpdate(
       { uid: decodedToken.uid },
       { $inc: { "aiPlan.tokens": -1 } }
@@ -378,10 +317,10 @@ ${retrievedSlokas}
 
   } catch (error: any) {
     console.error("Master AI Router Error:", error);
-    return NextResponse.json({ 
-      success: true, 
-      reply: "आयुष-ज्ञान AI: सर्वर अपडेट प्रक्रिया में है। कृपया कुछ ही पलों बाद पुनः प्रयास करें। (Available Soon)",
-      remainingTokens: 0 
+    return NextResponse.json({
+      success: true,
+      reply: "AyushGyaan AI: Server update in progress. Please try again shortly.",
+      remainingTokens: 0
     }, { status: 200 });
   }
 }
