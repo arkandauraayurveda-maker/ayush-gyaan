@@ -1,6 +1,6 @@
 "use client";
 
-import { ShieldCheck, BookOpen, Ticket, Users, Tag, Building2, Layers, Bot, Settings, UserPlus } from "lucide-react";
+import { ShieldCheck, BookOpen, Ticket, Users, Tag, Building2, Layers, Bot, Settings, UserPlus, BarChart3 } from "lucide-react";
 
 interface SidebarProps {
   activeTab: string;
@@ -83,7 +83,19 @@ export default function Sidebar({ activeTab, setActiveTab, isMainAdmin = false, 
                     : "text-gray-400 hover:bg-white/5"
                 }`}
               >
-                <Bot className="w-4 h-4" /> AI Chat Analytics
+                <Bot className="w-4 h-4" /> AI Chat Logs
+              </button>
+            )}
+            {canSeeTab("AI_CHAT_LOGS") && (
+              <button 
+                onClick={() => setActiveTab("AI_COST_INTELLIGENCE")} 
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                  activeTab === "AI_COST_INTELLIGENCE" 
+                    ? "bg-emerald-900/30 text-emerald-400 border border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.1)] font-bold" 
+                    : "text-gray-400 hover:bg-white/5"
+                }`}
+              >
+                <BarChart3 className="w-4 h-4 text-emerald-400" /> Cost Intelligence
               </button>
             )}
             {canSeeTab("GLOBAL_SETTINGS") && (

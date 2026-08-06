@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
@@ -11,7 +11,7 @@ import {
 import Link from "next/link";
 import { auth } from "@/lib/firebase";
 
-export default function SamhitaReader() {
+function SamhitaReaderContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -799,5 +799,19 @@ export default function SamhitaReader() {
       </AnimatePresence>
 
     </div>
+  );
+}
+
+// 🛠️ FIX FOR VERCEL DEPLOYMENT: Wrap in Suspense boundary to allow static pre-rendering
+export default function SamhitaReader() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#020604] flex flex-col items-center justify-center">
+        <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mb-4" />
+        <p className="text-emerald-400/80 text-xs font-semibold tracking-widest uppercase">Loading Samhita Workspace...</p>
+      </div>
+    }>
+      <SamhitaReaderContent />
+    </Suspense>
   );
 }

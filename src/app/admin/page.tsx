@@ -17,6 +17,7 @@ import InstitutionManagerTab from "./components/InstitutionManagerTab";
 import ChatAnalyticsTab from "./components/ChatAnalyticsTab";
 import GlobalSettingsTab from "./components/GlobalSettingsTab";
 import CoAdminManagerTab from "./components/CoAdminManagerTab";
+import AICostIntelligenceTab from "./components/AICostIntelligenceTab";
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -146,6 +147,10 @@ export default function AdminDashboard() {
 
           {(isMainAdmin || allowedTabs.includes("AI_CHAT_LOGS")) && activeTab === "AI_CHAT_LOGS" && (
             <ChatAnalyticsTab key="ai_logs" />
+          )}
+
+          {(isMainAdmin || allowedTabs.includes("AI_CHAT_LOGS")) && activeTab === "AI_COST_INTELLIGENCE" && (
+            <AICostIntelligenceTab key="ai_cost_intelligence" />
           )}
 
           {(isMainAdmin || allowedTabs.includes("GLOBAL_SETTINGS")) && activeTab === "GLOBAL_SETTINGS" && (
