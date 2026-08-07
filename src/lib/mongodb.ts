@@ -14,22 +14,36 @@ if (!cached) {
 }
 
 async function connectToDatabase() {
-  if (cached.conn) {
+  if (cached.conn && mongoose.connection.readyState === 1) {
     return cached.conn;
   }
 
   if (!cached.promise) {
     const opts = {
-      bufferCommands: false,
+      bufferCommands: true,
+      serverSelectionTimeoutMS: 5000, // ⚡ Fast 5s timeout instead of 60s hanging
+      connectTimeoutMS: 5000,
+      maxPoolSize: 10,
     };
 
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
-      return mongoose;
-    });
+    cached.promise = mongoose
+      .connect(MONGODB_URI, opts)
+      .then((m) => {
+        return m;
+      })
+      .catch((err) => {
+        cached.promise = null; // 🔄 Reset cached promise on error so retry works on next request
+        throw err;
+      });
   }
-  
-  cached.conn = await cached.promise;
-  return cached.conn;
+
+  try {
+    cached.conn = await cached.promise;
+    return cached.conn;
+  } catch (e) {
+    cached.promise = null;
+    throw e;
+  }
 }
 
 export default connectToDatabase;

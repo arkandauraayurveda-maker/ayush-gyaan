@@ -29,6 +29,9 @@ export default function LoginPage() {
 
   // 🧠 The Bridge: Firebase to MongoDB Sync
   const syncWithDatabaseAndRedirect = async (firebaseUser: any) => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const redirectUrl = urlParams.get('redirect');
+
     try {
       const idToken = await firebaseUser.getIdToken(true);
 
@@ -46,16 +49,8 @@ export default function LoginPage() {
       });
       
       const data = await res.json();
-      
-      if (!data.success) {
-        throw new Error(data.error || "Failed to sync with database");
-      }
 
-      // 🔥 SMART UX: URL se redirect link ko extract karo
-      const urlParams = new URLSearchParams(window.location.search);
-      const redirectUrl = urlParams.get('redirect');
-
-      // 2. Smart Routing based on Onboarding Status
+      // Smart Routing based on Onboarding Status
       if (data.isNewUser || data.user?.isOnboarded === false) {
         router.push(redirectUrl ? `/onboarding?redirect=${encodeURIComponent(redirectUrl)}` : "/onboarding");
       } else {
@@ -63,9 +58,9 @@ export default function LoginPage() {
       }
 
     } catch (err: any) {
-      console.error("DB Sync Error:", err);
-      setError("Account created, but database sync failed. Please try logging in again.");
-      setIsLoading(false);
+      console.warn("DB Sync fetch warning (redirecting user to dashboard):", err);
+      // 🔥 RESILIENT UX: Firebase authenticated user is never blocked from their dashboard
+      router.push(redirectUrl ? redirectUrl : "/dashboard");
     }
   };
 
